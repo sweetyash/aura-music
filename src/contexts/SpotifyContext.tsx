@@ -118,20 +118,26 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     const urlToken = extractSpotifyTokenFromUrl();
     if (!urlToken) return;
 
+    // Set token immediately so the app becomes functional
+    // Then validate in background
+    log("token_received_from_url", { tokenLength: urlToken.length });
+    setToken(urlToken);
+    tokenExpiresAt.current = Date.now() + 3600 * 1000;
+
     validateToken(urlToken).then(({ valid, premium }) => {
       if (!valid) {
         log("initial_token_invalid");
+        // Don't clear immediately — the token might still work for some endpoints
+        // Only show a warning
         toast({
-          title: "Spotify Login Failed",
-          description: "The access token is invalid or permissions were revoked. Please try again.",
+          title: "Spotify Connection Issue",
+          description: "Some features may be limited. Try disconnecting and reconnecting from Profile.",
           variant: "destructive",
         });
         return;
       }
       log("initial_token_valid", { premium });
-      setToken(urlToken);
       setIsPremium(premium);
-      tokenExpiresAt.current = Date.now() + 3600 * 1000;
 
       if (!premium) {
         toast({
@@ -140,6 +146,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           variant: "destructive",
         });
       }
+    }).catch((err) => {
+      log("token_validation_error", { error: String(err) });
+      // Token was already set — don't block the user
     });
   }, []);
 
