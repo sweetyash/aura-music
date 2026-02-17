@@ -106,6 +106,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const playerRef = useRef<SpotifyPlayer | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sdkProgressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenExpiresAt = useRef<number>(0);
 
   /** Stop preview audio */
@@ -272,12 +273,33 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         if (!state) {
           log("playback_state", { paused: true, reason: "no_state" });
           setIsPlaying(false);
+          if (sdkProgressInterval.current) {
+            clearInterval(sdkProgressInterval.current);
+            sdkProgressInterval.current = null;
+          }
           return;
         }
         const paused = state.paused;
         const trackName = state.track_window?.current_track?.name;
         log("playback_state", { paused, track: trackName });
         setIsPlaying(!paused);
+        setDuration(state.duration / 1000);
+        setProgress(state.position / 1000);
+
+        // Start/stop SDK progress polling
+        if (!paused) {
+          if (sdkProgressInterval.current) clearInterval(sdkProgressInterval.current);
+          sdkProgressInterval.current = setInterval(() => {
+            player.getCurrentState().then((s: any) => {
+              if (s) setProgress(s.position / 1000);
+            });
+          }, 500);
+        } else {
+          if (sdkProgressInterval.current) {
+            clearInterval(sdkProgressInterval.current);
+            sdkProgressInterval.current = null;
+          }
+        }
       });
 
       player.connect();
@@ -287,6 +309,10 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     init();
     return () => {
       cancelled = true;
+      if (sdkProgressInterval.current) {
+        clearInterval(sdkProgressInterval.current);
+        sdkProgressInterval.current = null;
+      }
       playerRef.current?.disconnect();
       playerRef.current = null;
       setDeviceId(null);

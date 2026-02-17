@@ -1,11 +1,15 @@
+import { useState } from "react";
 import { Play, Pause, ExternalLink, Lock, AlertTriangle } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import ExpandedPlayer from "@/components/ExpandedPlayer";
 import album1 from "@/assets/album-1.jpg";
 
 const MiniPlayer = () => {
   const { isConnected, isPremium, isPlaying, nowPlaying, playerReady, connect, togglePlayback, progress, duration } = useSpotify();
+  const [expanded, setExpanded] = useState(false);
 
-  const handlePlay = () => {
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!isConnected) {
       connect();
       return;
@@ -20,71 +24,73 @@ const MiniPlayer = () => {
   const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
-    <div className="fixed bottom-16 left-0 right-0 z-40">
-      {showPremiumWarning && (
-        <div className="bg-destructive/10 border-t border-destructive/20 px-3 py-1.5">
-          <div className="max-w-lg mx-auto flex items-center gap-2">
-            <AlertTriangle size={13} className="text-destructive flex-shrink-0" />
-            <p className="text-[11px] text-destructive">
-              Premium required for full playback.{" "}
-              <a href="https://spotify.com/premium" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
-                Upgrade
-              </a>
-            </p>
+    <>
+      <ExpandedPlayer open={expanded} onClose={() => setExpanded(false)} />
+      <div className="fixed bottom-16 left-0 right-0 z-40">
+        {showPremiumWarning && (
+          <div className="bg-destructive/10 border-t border-destructive/20 px-3 py-1.5">
+            <div className="max-w-lg mx-auto flex items-center gap-2">
+              <AlertTriangle size={13} className="text-destructive flex-shrink-0" />
+              <p className="text-[11px] text-destructive">
+                Premium required for full playback.{" "}
+                <a href="https://spotify.com/premium" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+                  Upgrade
+                </a>
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-      <div className="glass border-t border-border">
-        {/* Progress bar */}
-        {nowPlaying && progressPct > 0 && (
+        )}
+        <div className="glass border-t border-border cursor-pointer" onClick={() => setExpanded(true)}>
+          {/* Progress bar */}
           <div className="h-0.5 bg-secondary">
             <div
               className="h-full gradient-primary transition-all duration-200"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-        )}
-        <div className="px-3 py-2">
-          <div className="max-w-lg mx-auto flex items-center gap-3">
-            <img src={cover} alt="Now playing" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
+          <div className="px-3 py-2">
+            <div className="max-w-lg mx-auto flex items-center gap-3">
+              <img src={cover} alt="Now playing" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">{title}</p>
-              <p className="text-[11px] text-muted-foreground truncate">
-                {artist}
-                {nowPlaying?.previewMode && (
-                  <span className="ml-1 text-primary/70">· Preview</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {artist}
+                  {nowPlaying?.previewMode && (
+                    <span className="ml-1 text-primary/70">· Preview</span>
+                  )}
+                </p>
+              </div>
+
+              <button
+                onClick={handlePlay}
+                disabled={(isConnected && !playerReady && !nowPlaying) || showPremiumWarning}
+                className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20 disabled:opacity-50"
+              >
+                {!isConnected ? (
+                  <Lock size={14} />
+                ) : isPlaying ? (
+                  <Pause size={16} fill="currentColor" />
+                ) : (
+                  <Play size={16} fill="currentColor" className="ml-0.5" />
                 )}
-              </p>
+              </button>
+
+              <a
+                href={nowPlaying ? `https://open.spotify.com/track/${nowPlaying.trackUri.replace("spotify:track:", "")}` : "https://open.spotify.com"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-secondary text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors flex-shrink-0"
+              >
+                <ExternalLink size={12} />
+                <span className="hidden sm:inline">Spotify</span>
+              </a>
             </div>
-
-            <button
-              onClick={handlePlay}
-              disabled={(isConnected && !playerReady && !nowPlaying) || showPremiumWarning}
-              className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20 disabled:opacity-50"
-            >
-              {!isConnected ? (
-                <Lock size={14} />
-              ) : isPlaying ? (
-                <Pause size={16} fill="currentColor" />
-              ) : (
-                <Play size={16} fill="currentColor" className="ml-0.5" />
-              )}
-            </button>
-
-            <a
-              href={nowPlaying ? `https://open.spotify.com/track/${nowPlaying.trackUri.replace("spotify:track:", "")}` : "https://open.spotify.com"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-secondary text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors flex-shrink-0"
-            >
-              <ExternalLink size={12} />
-              <span className="hidden sm:inline">Spotify</span>
-            </a>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
