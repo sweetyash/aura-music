@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { mockTracks } from "@/data/tracks";
-import { Heart, X, Play, Music, TrendingUp, Calendar } from "lucide-react";
+import { Heart, X, Play, Music, TrendingUp, Calendar, Lock } from "lucide-react";
+import { useSpotify } from "@/contexts/SpotifyContext";
 import GlobalSearch from "@/components/GlobalSearch";
 
 const SWIPE_THRESHOLD = 100;
@@ -26,6 +27,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 );
 
 const Discover = () => {
+  const { isConnected, playerReady, connect, playTrack } = useSpotify();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -159,13 +161,34 @@ const Discover = () => {
             {/* Popularity */}
             <PopularityBar value={track.popularity} />
 
-            {/* Preview button */}
-            <div className="flex items-center gap-2 mt-3">
+            {/* Play button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isConnected) {
+                  connect();
+                } else {
+                  playTrack(
+                    track.spotifyUri || `spotify:track:${track.id}`,
+                    track.title,
+                    track.artist,
+                    track.cover
+                  );
+                }
+              }}
+              className="flex items-center gap-2 mt-3"
+            >
               <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
-                <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
+                {isConnected ? (
+                  <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
+                ) : (
+                  <Lock size={14} className="text-primary-foreground" />
+                )}
               </div>
-              <span className="text-xs text-muted-foreground">Preview · {track.duration}</span>
-            </div>
+              <span className="text-xs text-muted-foreground">
+                {!isConnected ? "Login with Spotify to play" : playerReady ? `Play · ${track.duration}` : "Connecting…"}
+              </span>
+            </button>
           </div>
         </div>
       </div>
