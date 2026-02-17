@@ -48,7 +48,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 
 const Discover = () => {
   const { isConnected, playerReady, connect, playTrack } = useSpotify();
-  const { getTopTracks, getRecommendations, getTopArtists, saveTrack } = useSpotifyApi();
+  const { getTopTracks, getRecommendations, getTopArtists, saveTrack, search, getNewReleases } = useSpotifyApi();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -77,24 +77,54 @@ const Discover = () => {
       const seedTrackIds = topTracks.slice(0, 3).map((t) => t.id);
       const seedArtistIds = topArtists.slice(0, 2).map((a: any) => a.id);
 
-      // Get recommendations based on seeds
+      // Try recommendations first
       const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 30).catch(() => ({ tracks: [] }));
       const recTracks: SpotifyTrack[] = recsRes?.tracks || [];
 
       if (recTracks.length > 0) {
-        // Shuffle recommendations for variety
         const shuffled = recTracks.sort(() => Math.random() - 0.5);
         setCards(shuffled.map(trackToCard));
       } else if (topTracks.length > 0) {
         // Fallback to top tracks
         setCards(topTracks.map(trackToCard));
+      } else {
+        // Fallback: use search with popular genres and new releases
+        const genres = ["pop", "indie", "hip hop", "electronic", "rock", "bollywood"];
+        const randomGenre = genres[Math.floor(Math.random() * genres.length)];
+        const [searchRes, newReleasesRes] = await Promise.all([
+          search(`genre:${randomGenre}`, "track", 20).catch(() => ({ tracks: { items: [] } })),
+          getNewReleases(20).catch(() => ({ albums: { items: [] } })),
+        ]);
+
+        const searchTracks: SpotifyTrack[] = searchRes?.tracks?.items || [];
+        
+        // Extract tracks from new release albums
+        const newReleaseAlbums = newReleasesRes?.albums?.items || [];
+        const albumTracks: SpotifyTrack[] = newReleaseAlbums.map((album: any) => ({
+          id: album.id,
+          name: album.name,
+          uri: album.uri,
+          duration_ms: 0,
+          album: { name: album.name, images: album.images || [] },
+          artists: album.artists || [],
+          popularity: album.popularity || 50,
+          explicit: false,
+        }));
+
+        const combined = [...searchTracks, ...albumTracks]
+          .filter((t, i, arr) => arr.findIndex((a) => a.id === t.id) === i)
+          .sort(() => Math.random() - 0.5);
+
+        if (combined.length > 0) {
+          setCards(combined.map(trackToCard));
+        }
       }
       setCurrentIndex(0);
     } catch (err) {
       console.error("Discover fetch error:", err);
     }
     setLoading(false);
-  }, [isConnected, getTopTracks, getTopArtists, getRecommendations]);
+  }, [isConnected, getTopTracks, getTopArtists, getRecommendations, search, getNewReleases]);
 
   useEffect(() => {
     if (isConnected && !fetchedRef.current) {
