@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { mockTracks } from "@/data/tracks";
 import { Heart, X, Play, Music, TrendingUp, Calendar } from "lucide-react";
+import GlobalSearch from "@/components/GlobalSearch";
 
 const SWIPE_THRESHOLD = 100;
 const ROTATION_FACTOR = 0.12;
@@ -29,6 +30,7 @@ const Discover = () => {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [exitDir, setExitDir] = useState<"left" | "right" | null>(null);
+  const [searchActive, setSearchActive] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -91,7 +93,14 @@ const Discover = () => {
   return (
     <div className="flex flex-col items-center px-4 pt-6 pb-4 min-h-[calc(100vh-4rem)]">
       <h1 className="text-xl font-bold text-foreground mb-0.5">Discover</h1>
-      <p className="text-sm text-muted-foreground mb-5">Swipe to find your next favorite</p>
+      <p className="text-sm text-muted-foreground mb-4">Swipe to find your next favorite</p>
+
+      {/* Search */}
+      <div className="w-full mb-4">
+        <GlobalSearch active={searchActive} onActiveChange={setSearchActive} />
+      </div>
+
+      {searchActive ? null : (<>
 
       {/* Card Stack */}
       <div className="relative w-full max-w-[320px] aspect-[3/4.2] mb-6">
@@ -182,6 +191,7 @@ const Discover = () => {
           <Music size={22} />
         </button>
       </div>
+      </>)}
     </div>
   );
 };
