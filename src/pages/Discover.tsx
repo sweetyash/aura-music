@@ -71,44 +71,61 @@ const Discover = () => {
     if (!isConnected) return;
     setLoading(true);
     try {
-      // Get user's top tracks and artists for seeds
-      const [topTracksRes, topArtistsRes] = await Promise.all([
+      // Get user's top tracks and artists for seeds (try multiple time ranges)
+      const [shortTracksRes, mediumTracksRes, topArtistsRes] = await Promise.all([
         getTopTracks("short_term", 20).catch(() => ({ items: [] })),
-        getTopArtists("short_term", 10).catch(() => ({ items: [] })),
+        getTopTracks("medium_term", 20).catch(() => ({ items: [] })),
+        getTopArtists("medium_term", 10).catch(() => ({ items: [] })),
       ]);
 
-      const topTracks: SpotifyTrack[] = topTracksRes?.items || [];
+      const shortTracks: SpotifyTrack[] = shortTracksRes?.items || [];
+      const mediumTracks: SpotifyTrack[] = mediumTracksRes?.items || [];
       const topArtists = topArtistsRes?.items || [];
 
-      const seedTrackIds = topTracks.slice(0, 3).map((t) => t.id);
+      // Merge and deduplicate top tracks
+      const allTopTracks = [...shortTracks, ...mediumTracks]
+        .filter((t, i, arr) => arr.findIndex(a => a.id === t.id) === i);
+
+      const seedTrackIds = allTopTracks.slice(0, 3).map((t) => t.id);
       const seedArtistIds = topArtists.slice(0, 2).map((a: any) => a.id);
 
-      // Try recommendations first
-      const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 50).catch(() => ({ tracks: [] }));
-      const recTracks: SpotifyTrack[] = recsRes?.tracks || [];
+      let allCards: DiscoverCard[] = [];
 
-      if (recTracks.length > 0) {
-        const shuffled = recTracks.sort(() => Math.random() - 0.5);
-        setCards(shuffled.map(trackToCard));
-      } else if (topTracks.length > 0) {
-        // Fallback to top tracks
-        setCards(topTracks.map(trackToCard));
-      } else {
-        // Fallback: search for popular tracks across multiple queries
+      // Try recommendations
+      if (seedTrackIds.length > 0 || seedArtistIds.length > 0) {
+        const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 50).catch(() => ({ tracks: [] }));
+        const recTracks: SpotifyTrack[] = recsRes?.tracks || [];
+        if (recTracks.length > 0) {
+          allCards = recTracks.map(trackToCard);
+        }
+      }
+
+      // If not enough, add top tracks
+      if (allCards.length < 20 && allTopTracks.length > 0) {
+        const existing = new Set(allCards.map(c => c.id));
+        const extra = allTopTracks.filter(t => !existing.has(t.id)).map(trackToCard);
+        allCards = [...allCards, ...extra];
+      }
+
+      // Always pad with search results if under 20
+      if (allCards.length < 20) {
         const queries = ["top hits 2025", "trending music", "popular songs", "new music friday", "viral hits", "bollywood hits", "global top 50", "chart toppers", "best new music", "hot right now"];
         const picked = queries.sort(() => Math.random() - 0.5).slice(0, 5);
         const results = await Promise.all(
           picked.map((q) => search(q, "track", 20).catch(() => ({ tracks: { items: [] } })))
         );
-
-        const allTracks: SpotifyTrack[] = results
+        const existing = new Set(allCards.map(c => c.id));
+        const searchTracks: SpotifyTrack[] = results
           .flatMap((r) => r?.tracks?.items || [])
-          .filter((t: any, i: number, arr: any[]) => arr.findIndex((a: any) => a.id === t.id) === i)
-          .sort(() => Math.random() - 0.5);
+          .filter((t: any) => !existing.has(t.id))
+          .filter((t: any, i: number, arr: any[]) => arr.findIndex((a: any) => a.id === t.id) === i);
+        allCards = [...allCards, ...searchTracks.map(trackToCard)];
+      }
 
-        if (allTracks.length > 0) {
-          setCards(allTracks.map(trackToCard));
-        }
+      // Shuffle and set
+      allCards = allCards.sort(() => Math.random() - 0.5);
+      if (allCards.length > 0) {
+        setCards(allCards);
       }
       setCurrentIndex(0);
     } catch (err) {
