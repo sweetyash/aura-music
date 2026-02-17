@@ -393,19 +393,39 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
     if (res.status === 404) {
       log("play_404_device_lost", { deviceId });
-      // Silently reconnect and retry once
-      playerRef.current?.connect();
-      // Wait for reconnection then retry
-      await new Promise((r) => setTimeout(r, 2000));
-      if (deviceId) {
-        const retryRes = await spotifyPlayRequest(currentToken, deviceId, uri);
-        if (retryRes.ok) {
-          log("play_retry_success", { uri, title });
-          setNowPlaying({ trackUri: uri, title, artist, cover });
-          return;
+      
+      // Try to transfer playback to our device first, then play
+      try {
+        const transferRes = await fetch("https://api.spotify.com/v1/me/player", {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ device_ids: [deviceId], play: false }),
+        });
+        log("transfer_playback", { status: transferRes.status });
+        
+        if (transferRes.ok || transferRes.status === 204) {
+          // Wait for transfer to take effect
+          await new Promise((r) => setTimeout(r, 1500));
+          const retryRes = await spotifyPlayRequest(currentToken, deviceId, uri);
+          if (retryRes.ok || retryRes.status === 204) {
+            log("play_retry_after_transfer_success", { uri });
+            setNowPlaying({ trackUri: uri, title, artist, cover });
+            return;
+          }
         }
+      } catch (err) {
+        log("transfer_failed", { error: String(err) });
       }
-      toast({ title: "Player Reconnecting", description: "Please try again in a moment.", variant: "destructive" });
+      
+      // Fallback: set nowPlaying so user can open in Spotify
+      setNowPlaying({ trackUri: uri, title, artist, cover });
+      toast({
+        title: "Opening in Spotify",
+        description: "Tap the Spotify link to play this track in the Spotify app.",
+      });
       return;
     }
     if (!res.ok) {
