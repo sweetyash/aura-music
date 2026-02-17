@@ -102,3 +102,43 @@
     scrollbar-width: none;
   }
 }
+
+/* Discover card Ken Burns animation */
+@keyframes kenBurns {
+  0% { transform: scale(1) translate(0, 0); }
+  25% { transform: scale(1.15) translate(-2%, -1%); }
+  50% { transform: scale(1.1) translate(1%, -2%); }
+  75% { transform: scale(1.2) translate(-1%, 1%); }
+  100% { transform: scale(1) translate(0, 0); }
+}
+
+@keyframes shimmerGlow {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.15; }
+}
+
+@keyframes vinylSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.discover-card-art {
+  animation: kenBurns 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+.discover-card-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 40%, hsl(141 73% 42% / 0.2), transparent 60%);
+  animation: shimmerGlow 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.discover-vinyl {
+  animation: vinylSpin 3s linear infinite;
+}
+
+.discover-vinyl-paused {
+  animation-play-state: paused;
+}
