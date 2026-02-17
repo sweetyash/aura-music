@@ -180,6 +180,24 @@ export function useSpotifyApi() {
     []
   );
 
+  const getRecommendations = useCallback(
+    (seedTracks: string[], seedArtists: string[], limit = 20) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (seedTracks.length) params.set("seed_tracks", seedTracks.slice(0, 3).join(","));
+      if (seedArtists.length) params.set("seed_artists", seedArtists.slice(0, 2).join(","));
+      if (!seedTracks.length && !seedArtists.length) {
+        params.set("seed_genres", "pop,indie,bollywood");
+      }
+      return callApi(`/v1/recommendations?${params}`);
+    },
+    [callApi]
+  );
+
+  const getNewReleases = useCallback(
+    (limit = 20) => callApi(`/v1/browse/new-releases?limit=${limit}`),
+    [callApi]
+  );
+
   return {
     search,
     getRecentlyPlayed,
@@ -195,5 +213,7 @@ export function useSpotifyApi() {
     checkSavedTracks,
     getCurrentUser,
     getAiRecommendations,
+    getRecommendations,
+    getNewReleases,
   };
 }

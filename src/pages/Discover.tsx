@@ -1,17 +1,37 @@
-import { useRef, useState, useCallback } from "react";
-import { mockTracks } from "@/data/tracks";
-import { Heart, X, Play, Music, TrendingUp, Calendar, Lock } from "lucide-react";
+import { useRef, useState, useCallback, useEffect } from "react";
+import { Heart, X, Play, Music, TrendingUp, Lock, Loader2, RefreshCw } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import GlobalSearch from "@/components/GlobalSearch";
 
 const SWIPE_THRESHOLD = 100;
 const ROTATION_FACTOR = 0.12;
 
-const langColors: Record<string, string> = {
-  Telugu: "bg-amber-500/20 text-amber-400",
-  Tamil: "bg-rose-500/20 text-rose-400",
-  English: "bg-sky-500/20 text-sky-400",
-};
+interface DiscoverCard {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  cover: string;
+  duration: string;
+  popularity: number;
+  uri: string;
+  year: number;
+}
+
+function trackToCard(t: SpotifyTrack): DiscoverCard {
+  return {
+    id: t.id,
+    title: t.name,
+    artist: t.artists?.map((a) => a.name).join(", ") || "Unknown",
+    album: t.album?.name || "",
+    cover: getTrackCover(t),
+    duration: formatDuration(t.duration_ms),
+    popularity: t.popularity || 0,
+    uri: t.uri,
+    year: (t.album as any)?.release_date ? parseInt((t.album as any).release_date) : 0,
+  };
+}
 
 const PopularityBar = ({ value }: { value: number }) => (
   <div className="flex items-center gap-2">
@@ -28,16 +48,67 @@ const PopularityBar = ({ value }: { value: number }) => (
 
 const Discover = () => {
   const { isConnected, playerReady, connect, playTrack } = useSpotify();
+  const { getTopTracks, getRecommendations, getTopArtists, saveTrack } = useSpotifyApi();
+  const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [exitDir, setExitDir] = useState<"left" | "right" | null>(null);
   const [searchActive, setSearchActive] = useState(false);
+  const [loading, setLoading] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
 
-  const track = mockTracks[currentIndex % mockTracks.length];
-  const nextTrack = mockTracks[(currentIndex + 1) % mockTracks.length];
+  // Fetch personalized recommendations
+  const fetchCards = useCallback(async () => {
+    if (!isConnected) return;
+    setLoading(true);
+    try {
+      // Get user's top tracks and artists for seeds
+      const [topTracksRes, topArtistsRes] = await Promise.all([
+        getTopTracks("short_term", 5).catch(() => ({ items: [] })),
+        getTopArtists("short_term", 5).catch(() => ({ items: [] })),
+      ]);
+
+      const topTracks: SpotifyTrack[] = topTracksRes?.items || [];
+      const topArtists = topArtistsRes?.items || [];
+
+      const seedTrackIds = topTracks.slice(0, 3).map((t) => t.id);
+      const seedArtistIds = topArtists.slice(0, 2).map((a: any) => a.id);
+
+      // Get recommendations based on seeds
+      const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 30).catch(() => ({ tracks: [] }));
+      const recTracks: SpotifyTrack[] = recsRes?.tracks || [];
+
+      if (recTracks.length > 0) {
+        // Shuffle recommendations for variety
+        const shuffled = recTracks.sort(() => Math.random() - 0.5);
+        setCards(shuffled.map(trackToCard));
+      } else if (topTracks.length > 0) {
+        // Fallback to top tracks
+        setCards(topTracks.map(trackToCard));
+      }
+      setCurrentIndex(0);
+    } catch (err) {
+      console.error("Discover fetch error:", err);
+    }
+    setLoading(false);
+  }, [isConnected, getTopTracks, getTopArtists, getRecommendations]);
+
+  useEffect(() => {
+    if (isConnected && !fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchCards();
+    }
+    if (!isConnected) {
+      fetchedRef.current = false;
+      setCards([]);
+    }
+  }, [isConnected, fetchCards]);
+
+  const card = cards[currentIndex];
+  const nextCard = cards[currentIndex + 1];
 
   const handleStart = useCallback((clientX: number, clientY: number) => {
     startPos.current = { x: clientX, y: clientY };
@@ -57,6 +128,10 @@ const Discover = () => {
     if (Math.abs(offset.x) > SWIPE_THRESHOLD) {
       const dir = offset.x > 0 ? "right" : "left";
       setExitDir(dir);
+      // If swiped right (liked), save the track
+      if (dir === "right" && card) {
+        saveTrack(card.id).catch(() => {});
+      }
       setTimeout(() => {
         setCurrentIndex((i) => i + 1);
         setOffset({ x: 0, y: 0 });
@@ -65,9 +140,12 @@ const Discover = () => {
     } else {
       setOffset({ x: 0, y: 0 });
     }
-  }, [offset.x]);
+  }, [offset.x, card, saveTrack]);
 
   const swipeButton = (dir: "left" | "right") => {
+    if (dir === "right" && card) {
+      saveTrack(card.id).catch(() => {});
+    }
     setExitDir(dir);
     setOffset({ x: dir === "right" ? 300 : -300, y: 0 });
     setTimeout(() => {
@@ -92,129 +170,158 @@ const Discover = () => {
         transition: isDragging ? "none" : "transform 0.4s cubic-bezier(.17,.67,.2,1.2)",
       };
 
+  // Not connected state
+  if (!isConnected) {
+    return (
+      <div className="flex flex-col items-center px-4 pt-6 pb-4 min-h-[calc(100vh-4rem)]">
+        <h1 className="text-xl font-bold text-foreground mb-0.5">Discover</h1>
+        <p className="text-sm text-muted-foreground mb-6">Connect Spotify to get personalized suggestions</p>
+        <div className="flex flex-col items-center justify-center flex-1">
+          <Music size={48} className="text-muted-foreground/30 mb-4" />
+          <button
+            onClick={connect}
+            className="px-8 py-3 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20"
+          >
+            Login with Spotify
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center px-4 pt-6 pb-4 min-h-[calc(100vh-4rem)]">
       <h1 className="text-xl font-bold text-foreground mb-0.5">Discover</h1>
-      <p className="text-sm text-muted-foreground mb-4">Swipe to find your next favorite</p>
+      <p className="text-sm text-muted-foreground mb-4">Personalized picks just for you</p>
 
       {/* Search */}
       <div className="w-full mb-4">
         <GlobalSearch active={searchActive} onActiveChange={setSearchActive} />
       </div>
 
-      {searchActive ? null : (<>
-
-      {/* Card Stack */}
-      <div className="relative w-full max-w-[320px] aspect-[3/4.2] mb-6">
-        {/* Background card (next) */}
-        <div className="absolute inset-2 rounded-2xl overflow-hidden bg-card shadow-xl scale-[0.96] opacity-60">
-          <img src={nextTrack.cover} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-        </div>
-
-        {/* Active card */}
-        <div
-          ref={cardRef}
-          className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl cursor-grab active:cursor-grabbing select-none z-10"
-          style={cardStyle}
-          onTouchStart={(e) => handleStart(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchMove={(e) => handleMove(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchEnd={handleEnd}
-          onMouseDown={(e) => { e.preventDefault(); handleStart(e.clientX, e.clientY); }}
-          onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
-          onMouseUp={handleEnd}
-          onMouseLeave={() => { if (isDragging) handleEnd(); }}
-        >
-          <img src={track.cover} alt={track.album} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
-
-          {/* Like / Skip overlays */}
-          <div
-            className="absolute top-6 left-5 z-20 px-4 py-2 rounded-xl border-[3px] border-primary text-primary font-black text-2xl -rotate-12 tracking-wider"
-            style={{ opacity: likeOpacity }}
-          >
-            LIKE
-          </div>
-          <div
-            className="absolute top-6 right-5 z-20 px-4 py-2 rounded-xl border-[3px] border-destructive text-destructive font-black text-2xl rotate-12 tracking-wider"
-            style={{ opacity: skipOpacity }}
-          >
-            SKIP
-          </div>
-
-          {/* Info */}
-          <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
-            {/* Language tag */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${langColors[track.language] || "bg-secondary text-secondary-foreground"}`}>
-                {track.language}
-              </span>
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Calendar size={11} />
-                {track.year}
-              </span>
+      {searchActive ? null : (
+        <>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 size={32} className="animate-spin text-primary mb-3" />
+              <p className="text-sm text-muted-foreground">Loading your recommendations...</p>
             </div>
-
-            <p className="text-2xl font-bold text-foreground leading-tight">{track.title}</p>
-            <p className="text-sm text-muted-foreground mt-1 mb-3">{track.artist} · {track.album}</p>
-
-            {/* Popularity */}
-            <PopularityBar value={track.popularity} />
-
-            {/* Play button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isConnected) {
-                  connect();
-                } else {
-                  playTrack(
-                    track.spotifyUri || `spotify:track:${track.id}`,
-                    track.title,
-                    track.artist,
-                    track.cover
-                  );
-                }
-              }}
-              className="flex items-center gap-2 mt-3"
-            >
-              <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
-                {isConnected ? (
-                  <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
-                ) : (
-                  <Lock size={14} className="text-primary-foreground" />
+          ) : !card ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Music size={48} className="text-muted-foreground/30 mb-4" />
+              <p className="text-base font-semibold text-foreground mb-1">No more cards!</p>
+              <p className="text-sm text-muted-foreground mb-4">Refresh for new suggestions</p>
+              <button
+                onClick={() => { fetchedRef.current = false; fetchCards(); }}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20"
+              >
+                <RefreshCw size={16} />
+                Get More
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Card Stack */}
+              <div className="relative w-full max-w-[320px] aspect-[3/4.2] mb-6">
+                {/* Background card (next) */}
+                {nextCard && (
+                  <div className="absolute inset-2 rounded-2xl overflow-hidden bg-card shadow-xl scale-[0.96] opacity-60">
+                    <img src={nextCard.cover} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+                  </div>
                 )}
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {!isConnected ? "Login with Spotify to play" : playerReady ? `Play · ${track.duration}` : "Connecting…"}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-6">
-        <button
-          onClick={() => swipeButton("left")}
-          className="w-14 h-14 rounded-full border-2 border-destructive/40 flex items-center justify-center text-destructive hover:bg-destructive/10 transition-all active:scale-90"
-        >
-          <X size={26} />
-        </button>
-        <button
-          onClick={() => swipeButton("right")}
-          className="w-[68px] h-[68px] rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-transform"
-        >
-          <Heart size={30} fill="currentColor" />
-        </button>
-        <button
-          onClick={() => swipeButton("left")}
-          className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all active:scale-90"
-        >
-          <Music size={22} />
-        </button>
-      </div>
-      </>)}
+                {/* Active card */}
+                <div
+                  ref={cardRef}
+                  className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl cursor-grab active:cursor-grabbing select-none z-10"
+                  style={cardStyle}
+                  onTouchStart={(e) => handleStart(e.touches[0].clientX, e.touches[0].clientY)}
+                  onTouchMove={(e) => handleMove(e.touches[0].clientX, e.touches[0].clientY)}
+                  onTouchEnd={handleEnd}
+                  onMouseDown={(e) => { e.preventDefault(); handleStart(e.clientX, e.clientY); }}
+                  onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
+                  onMouseUp={handleEnd}
+                  onMouseLeave={() => { if (isDragging) handleEnd(); }}
+                >
+                  <img src={card.cover} alt={card.album} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
+
+                  {/* Like / Skip overlays */}
+                  <div
+                    className="absolute top-6 left-5 z-20 px-4 py-2 rounded-xl border-[3px] border-primary text-primary font-black text-2xl -rotate-12 tracking-wider"
+                    style={{ opacity: likeOpacity }}
+                  >
+                    LIKE
+                  </div>
+                  <div
+                    className="absolute top-6 right-5 z-20 px-4 py-2 rounded-xl border-[3px] border-destructive text-destructive font-black text-2xl rotate-12 tracking-wider"
+                    style={{ opacity: skipOpacity }}
+                  >
+                    SKIP
+                  </div>
+
+                  {/* Info */}
+                  <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
+                    <p className="text-2xl font-bold text-foreground leading-tight">{card.title}</p>
+                    <p className="text-sm text-muted-foreground mt-1 mb-3">{card.artist} · {card.album}</p>
+
+                    {/* Popularity */}
+                    <PopularityBar value={card.popularity} />
+
+                    {/* Play button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playTrack(card.uri, card.title, card.artist, card.cover);
+                      }}
+                      className="flex items-center gap-2 mt-3"
+                    >
+                      <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
+                        {playerReady ? (
+                          <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
+                        ) : (
+                          <Lock size={14} className="text-primary-foreground" />
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {playerReady ? `Play · ${card.duration}` : "Connecting…"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-6">
+                <button
+                  onClick={() => swipeButton("left")}
+                  className="w-14 h-14 rounded-full border-2 border-destructive/40 flex items-center justify-center text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+                >
+                  <X size={26} />
+                </button>
+                <button
+                  onClick={() => swipeButton("right")}
+                  className="w-[68px] h-[68px] rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-transform"
+                >
+                  <Heart size={30} fill="currentColor" />
+                </button>
+                <button
+                  onClick={() => { fetchedRef.current = false; fetchCards(); }}
+                  className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all active:scale-90"
+                >
+                  <RefreshCw size={22} />
+                </button>
+              </div>
+
+              {/* Card counter */}
+              <p className="text-xs text-muted-foreground mt-3">
+                {currentIndex + 1} / {cards.length}
+              </p>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 };
