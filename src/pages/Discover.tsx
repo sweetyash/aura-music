@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Heart, X, Play, Music, TrendingUp, Lock, Loader2, RefreshCw } from "lucide-react";
+import { Heart, X, Play, Pause, Music, TrendingUp, Lock, Loader2, RefreshCw, Disc } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import GlobalSearch from "@/components/GlobalSearch";
@@ -47,7 +47,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 );
 
 const Discover = () => {
-  const { isConnected, playerReady, connect, playTrack } = useSpotify();
+  const { isConnected, playerReady, isPlaying, nowPlaying, connect, playTrack, togglePlayback } = useSpotify();
   const { getTopTracks, getRecommendations, getTopArtists, saveTrack, search } = useSpotifyApi();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -259,7 +259,11 @@ const Discover = () => {
                   onMouseUp={handleEnd}
                   onMouseLeave={() => { if (isDragging) handleEnd(); }}
                 >
-                  <img src={card.cover} alt={card.album} className="w-full h-full object-cover" />
+                  {/* Animated album art - Ken Burns effect */}
+                  <img src={card.cover} alt={card.album} className="w-full h-full object-cover discover-card-art" />
+                  {/* Shimmer glow overlay */}
+                  <div className="discover-card-glow" />
+                  {/* Gradient overlay for text readability */}
                   <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
 
                   {/* Like / Skip overlays */}
@@ -284,25 +288,42 @@ const Discover = () => {
                     {/* Popularity */}
                     <PopularityBar value={card.popularity} />
 
-                    {/* Play button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        playTrack(card.uri, card.title, card.artist, card.cover);
-                      }}
-                      className="flex items-center gap-2 mt-3"
-                    >
-                      <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
-                        {playerReady ? (
-                          <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
-                        ) : (
-                          <Lock size={14} className="text-primary-foreground" />
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {playerReady ? `Play · ${card.duration}` : "Connecting…"}
-                      </span>
-                    </button>
+                    {/* Play/Pause button + vinyl disc */}
+                    {(() => {
+                      const isCurrentTrackPlaying = isPlaying && nowPlaying?.trackUri === card.uri;
+                      return (
+                        <div className="flex items-center gap-3 mt-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isCurrentTrackPlaying) {
+                                togglePlayback();
+                              } else {
+                                playTrack(card.uri, card.title, card.artist, card.cover);
+                              }
+                            }}
+                            className="flex items-center gap-2"
+                          >
+                            <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
+                              {!playerReady ? (
+                                <Lock size={14} className="text-primary-foreground" />
+                              ) : isCurrentTrackPlaying ? (
+                                <Pause size={15} className="text-primary-foreground" fill="currentColor" />
+                              ) : (
+                                <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {!playerReady ? "Connecting…" : isCurrentTrackPlaying ? `Playing · ${card.duration}` : `Play · ${card.duration}`}
+                            </span>
+                          </button>
+                          {/* Vinyl disc indicator */}
+                          {isCurrentTrackPlaying && (
+                            <Disc size={20} className="text-primary discover-vinyl" />
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
