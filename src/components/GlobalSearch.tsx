@@ -40,7 +40,7 @@ const GlobalSearch = ({ active, onActiveChange }: Props) => {
     setSearched(false);
     const t = setTimeout(async () => {
       try {
-        const data = await search(query, "track", 20);
+        const data = await search(query, "track", 10);
         setResults(data.tracks?.items || []);
       } catch (err) {
         console.error("Search error:", err);

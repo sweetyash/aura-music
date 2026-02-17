@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useSpotify } from "@/contexts/SpotifyContext";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface SpotifyTrack {
   id: string;
@@ -61,12 +60,21 @@ export function useSpotifyApi() {
     async (endpoint: string, method = "GET", body?: any) => {
       if (!token) throw new Error("Not connected to Spotify");
 
-      const { data, error } = await supabase.functions.invoke("spotify-api", {
-        body: { endpoint, method, body, token },
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/spotify-api`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ endpoint, method, body, token }),
+        }
+      );
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error?.message || data.error);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || data?.error || "Spotify API error");
       return data;
     },
     [token]
@@ -153,10 +161,20 @@ export function useSpotifyApi() {
 
   const getAiRecommendations = useCallback(
     async (topTracks: any[], topArtists: any[], recentTracks: any[]) => {
-      const { data, error } = await supabase.functions.invoke("ai-recommendations", {
-        body: { topTracks, topArtists, recentTracks },
-      });
-      if (error) throw error;
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-recommendations`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ topTracks, topArtists, recentTracks }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "AI recommendations error");
       return data;
     },
     []
