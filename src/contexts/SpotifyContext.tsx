@@ -9,6 +9,7 @@ interface NowPlaying {
   title: string;
   artist: string;
   cover: string;
+  previewMode?: boolean;
 }
 
 interface SpotifyAuthCtx {
@@ -20,6 +21,8 @@ interface SpotifyAuthCtx {
   playerReady: boolean;
   isPlaying: boolean;
   nowPlaying: NowPlaying | null;
+  progress: number;
+  duration: number;
   connect: () => Promise<void>;
   refresh: () => Promise<void>;
   disconnect: () => void;
@@ -36,6 +39,8 @@ const SpotifyContext = createContext<SpotifyAuthCtx>({
   playerReady: false,
   isPlaying: false,
   nowPlaying: null,
+  progress: 0,
+  duration: 0,
   connect: async () => {},
   refresh: async () => {},
   disconnect: () => {},
@@ -96,12 +101,32 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   const playerRef = useRef<SpotifyPlayer | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenExpiresAt = useRef<number>(0);
+
+  /** Stop preview audio */
+  const stopPreview = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+    setProgress(0);
+    setDuration(0);
+  }, []);
 
   /** Clear all Spotify state */
   const clearState = useCallback(() => {
     log("state_cleared");
+    stopPreview();
     playerRef.current?.disconnect();
     playerRef.current = null;
     setToken(null);
@@ -111,7 +136,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setIsPremium(null);
     setNowPlaying(null);
     tokenExpiresAt.current = 0;
-  }, []);
+  }, [stopPreview]);
 
   // On mount, check for callback token in URL and validate it
   useEffect(() => {
@@ -301,6 +326,62 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  /** Play a 30s preview via HTML5 Audio */
+  const playPreview = useCallback(async (trackId: string, uri: string, title: string, artist: string, cover: string, accessToken: string) => {
+    // Fetch track details to get preview_url
+    try {
+      const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!trackRes.ok) {
+        log("preview_fetch_failed", { status: trackRes.status });
+        return false;
+      }
+      const trackData = await trackRes.json();
+      const previewUrl = trackData.preview_url;
+      if (!previewUrl) {
+        log("no_preview_url", { trackId });
+        return false;
+      }
+
+      // Stop any existing preview
+      stopPreview();
+
+      const audio = new Audio(previewUrl);
+      audioRef.current = audio;
+
+      audio.addEventListener("loadedmetadata", () => {
+        setDuration(audio.duration);
+      });
+      audio.addEventListener("ended", () => {
+        setIsPlaying(false);
+        setProgress(0);
+        if (progressInterval.current) clearInterval(progressInterval.current);
+      });
+      audio.addEventListener("error", () => {
+        log("preview_audio_error");
+        setIsPlaying(false);
+      });
+
+      await audio.play();
+      setIsPlaying(true);
+      setNowPlaying({ trackUri: uri, title, artist, cover, previewMode: true });
+
+      // Update progress
+      progressInterval.current = setInterval(() => {
+        if (audio.currentTime && audio.duration) {
+          setProgress(audio.currentTime);
+        }
+      }, 250);
+
+      log("preview_started", { trackId, title });
+      return true;
+    } catch (err) {
+      log("preview_error", { error: String(err) });
+      return false;
+    }
+  }, [stopPreview]);
+
   const playTrack = useCallback(async (uri: string, title: string, artist: string, cover: string) => {
     log("play_requested", { uri, title });
 
@@ -393,37 +474,18 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
     if (res.status === 404) {
       log("play_404_device_lost", { deviceId });
+      const trackId = uri.replace("spotify:track:", "");
       
-      // Try to transfer playback to our device first, then play
-      try {
-        const transferRes = await fetch("https://api.spotify.com/v1/me/player", {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ device_ids: [deviceId], play: false }),
-        });
-        log("transfer_playback", { status: transferRes.status });
-        
-        if (transferRes.ok || transferRes.status === 204) {
-          // Wait for transfer to take effect
-          await new Promise((r) => setTimeout(r, 1500));
-          const retryRes = await spotifyPlayRequest(currentToken, deviceId, uri);
-          if (retryRes.ok || retryRes.status === 204) {
-            log("play_retry_after_transfer_success", { uri });
-            setNowPlaying({ trackUri: uri, title, artist, cover });
-            return;
-          }
-        }
-      } catch (err) {
-        log("transfer_failed", { error: String(err) });
+      // Fallback: play 30s preview in-app
+      if (currentToken) {
+        const previewOk = await playPreview(trackId, uri, title, artist, cover, currentToken);
+        if (previewOk) return;
       }
       
-      // Fallback: set nowPlaying so user can open in Spotify
+      // Last resort: set nowPlaying for "Open in Spotify" link
       setNowPlaying({ trackUri: uri, title, artist, cover });
       toast({
-        title: "Opening in Spotify",
+        title: "Preview Unavailable",
         description: "Tap the Spotify link to play this track in the Spotify app.",
       });
       return;
@@ -436,10 +498,27 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
 
     log("play_started", { uri, title });
+    stopPreview(); // Stop any preview when SDK playback starts
     setNowPlaying({ trackUri: uri, title, artist, cover });
-  }, [deviceId, isPremium, ensureToken, spotifyPlayRequest, clearState]);
+  }, [deviceId, isPremium, ensureToken, spotifyPlayRequest, clearState, playPreview, stopPreview]);
 
   const togglePlayback = useCallback(async () => {
+    // Handle preview audio toggle
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        await audioRef.current.play();
+        setIsPlaying(true);
+        progressInterval.current = setInterval(() => {
+          if (audioRef.current) setProgress(audioRef.current.currentTime);
+        }, 250);
+      } else {
+        audioRef.current.pause();
+        setIsPlaying(false);
+        if (progressInterval.current) clearInterval(progressInterval.current);
+      }
+      return;
+    }
+    // Handle SDK toggle
     if (!playerRef.current) return;
     log("toggle_playback", { wasPlaying: isPlaying });
     await playerRef.current.togglePlay();
@@ -456,6 +535,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         playerReady,
         isPlaying,
         nowPlaying,
+        progress,
+        duration,
         connect,
         refresh,
         disconnect,
