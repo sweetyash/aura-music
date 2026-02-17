@@ -1,9 +1,9 @@
-import { Play, Pause, ExternalLink, Lock } from "lucide-react";
+import { Play, Pause, ExternalLink, Lock, AlertTriangle } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import album1 from "@/assets/album-1.jpg";
 
 const MiniPlayer = () => {
-  const { isConnected, isPlaying, nowPlaying, playerReady, connect, togglePlayback } = useSpotify();
+  const { isConnected, isPremium, isPlaying, nowPlaying, playerReady, connect, togglePlayback } = useSpotify();
 
   const handlePlay = () => {
     if (!isConnected) {
@@ -16,9 +16,23 @@ const MiniPlayer = () => {
   const cover = nowPlaying?.cover || album1;
   const title = nowPlaying?.title || "No track selected";
   const artist = nowPlaying?.artist || "Connect Spotify to play";
+  const showPremiumWarning = isConnected && isPremium === false;
 
   return (
     <div className="fixed bottom-16 left-0 right-0 z-40">
+      {showPremiumWarning && (
+        <div className="bg-destructive/10 border-t border-destructive/20 px-3 py-1.5">
+          <div className="max-w-lg mx-auto flex items-center gap-2">
+            <AlertTriangle size={13} className="text-destructive flex-shrink-0" />
+            <p className="text-[11px] text-destructive">
+              Premium required for playback.{" "}
+              <a href="https://spotify.com/premium" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+                Upgrade
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
       <div className="glass border-t border-border px-3 py-2">
         <div className="max-w-lg mx-auto flex items-center gap-3">
           <img src={cover} alt="Now playing" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
@@ -30,7 +44,7 @@ const MiniPlayer = () => {
 
           <button
             onClick={handlePlay}
-            disabled={isConnected && !playerReady && !nowPlaying}
+            disabled={(isConnected && !playerReady && !nowPlaying) || showPremiumWarning}
             className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20 disabled:opacity-50"
           >
             {!isConnected ? (

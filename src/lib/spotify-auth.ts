@@ -17,12 +17,27 @@ export async function refreshSpotifyToken(): Promise<string> {
 /** Check URL params for spotify_token after callback redirect */
 export function extractSpotifyTokenFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
+
+  // Handle denied permissions
+  const spotifyError = params.get("spotify_error");
+  if (spotifyError) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("spotify_error");
+    window.history.replaceState({}, "", url.pathname);
+    return null;
+  }
+
   const token = params.get("spotify_token");
   if (token) {
-    // Clean URL
     const url = new URL(window.location.href);
     url.searchParams.delete("spotify_token");
     window.history.replaceState({}, "", url.pathname);
   }
   return token;
+}
+
+/** Check for spotify_error in URL (denied permissions) */
+export function extractSpotifyErrorFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("spotify_error");
 }

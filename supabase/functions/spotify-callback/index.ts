@@ -4,10 +4,22 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
+    const error = url.searchParams.get("error");
     const userId = url.searchParams.get("state");
 
+    // Handle Spotify denied/revoked permissions
+    if (error) {
+      const appOrigin = Deno.env.get("APP_ORIGIN") || "https://lovable.app";
+      const redirectTo = new URL("/", appOrigin);
+      redirectTo.searchParams.set("spotify_error", error === "access_denied" ? "denied" : "error");
+      return Response.redirect(redirectTo.toString(), 302);
+    }
+
     if (!code || !userId || userId === "anonymous") {
-      return new Response("Missing code or user state", { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Missing authorization code or user context." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     const clientId = Deno.env.get("SPOTIFY_CLIENT_ID")!;
@@ -31,7 +43,11 @@ Deno.serve(async (req) => {
     const tokenData = await tokenRes.json();
 
     if (!tokenRes.ok) {
-      return new Response(`Spotify error: ${JSON.stringify(tokenData)}`, { status: 400 });
+      console.error("[spotify-callback] Token exchange failed:", JSON.stringify(tokenData));
+      return new Response(
+        JSON.stringify({ error: "Failed to exchange authorization code. Please try again." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     const { access_token, refresh_token, expires_in } = tokenData;
@@ -56,16 +72,24 @@ Deno.serve(async (req) => {
       );
 
     if (dbError) {
-      return new Response(`DB error: ${dbError.message}`, { status: 500 });
+      console.error("[spotify-callback] DB error:", dbError.message);
+      return new Response(
+        JSON.stringify({ error: "Internal error saving your credentials." }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
     }
 
-    // Redirect back to the app with the access token
-    const appUrl = req.headers.get("origin") || req.headers.get("referer") || "/";
-    const redirectTo = new URL("/", appUrl.startsWith("http") ? appUrl : `https://${appUrl}`);
+    // Redirect back to the app — use referer or fallback
+    const origin = req.headers.get("origin") || req.headers.get("referer") || "/";
+    const redirectTo = new URL("/", origin.startsWith("http") ? origin : `https://${origin}`);
     redirectTo.searchParams.set("spotify_token", access_token);
 
     return Response.redirect(redirectTo.toString(), 302);
   } catch (error) {
-    return new Response(`Error: ${error.message}`, { status: 500 });
+    console.error("[spotify-callback] Unhandled error:", error);
+    return new Response(
+      JSON.stringify({ error: "An unexpected error occurred." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 });
