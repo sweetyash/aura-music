@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     }
 
     // Redirect back to the app
-    const appOrigin = Deno.env.get("APP_ORIGIN") || "https://id-preview--1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovable.app";
+    const appOrigin = Deno.env.get("APP_ORIGIN") || "https://1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovableproject.com";
     const redirectTo = new URL("/", appOrigin);
     redirectTo.searchParams.set("spotify_token", access_token);
 
