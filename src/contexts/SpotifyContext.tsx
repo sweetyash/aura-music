@@ -94,8 +94,18 @@ async function validateToken(accessToken: string): Promise<{ valid: boolean; pre
   }
 }
 
+const STORAGE_KEY_TOKEN = "spotify_access_token";
+const STORAGE_KEY_EXPIRES = "spotify_token_expires";
+
 export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setTokenState] = useState<string | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_TOKEN);
+    const exp = Number(localStorage.getItem(STORAGE_KEY_EXPIRES) || "0");
+    if (saved && exp > Date.now()) return saved;
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+    localStorage.removeItem(STORAGE_KEY_EXPIRES);
+    return null;
+  });
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -107,7 +117,23 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const sdkProgressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tokenExpiresAt = useRef<number>(0);
+  const tokenExpiresAt = useRef<number>(Number(localStorage.getItem(STORAGE_KEY_EXPIRES) || "0"));
+
+  /** Wrapper to persist token */
+  const setToken = useCallback((t: string | null) => {
+    setTokenState(t);
+    if (t) {
+      localStorage.setItem(STORAGE_KEY_TOKEN, t);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+      localStorage.removeItem(STORAGE_KEY_EXPIRES);
+    }
+  }, []);
+
+  const setTokenExpiry = useCallback((exp: number) => {
+    tokenExpiresAt.current = exp;
+    localStorage.setItem(STORAGE_KEY_EXPIRES, String(exp));
+  }, []);
 
   /** Stop preview audio */
   const stopPreview = useCallback(() => {
@@ -136,25 +162,27 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setIsPlaying(false);
     setIsPremium(null);
     setNowPlaying(null);
-    tokenExpiresAt.current = 0;
-  }, [stopPreview]);
+    setTokenExpiry(0);
+  }, [stopPreview, setToken, setTokenExpiry]);
 
-  // On mount, check for callback token in URL and validate it
+  // On mount, check for callback token in URL OR restore from localStorage
   useEffect(() => {
     const urlToken = extractSpotifyTokenFromUrl();
-    if (!urlToken) return;
+    const activeToken = urlToken || token;
+    
+    if (!activeToken) return;
 
-    // Set token immediately so the app becomes functional
-    // Then validate in background
-    log("token_received_from_url", { tokenLength: urlToken.length });
-    setToken(urlToken);
-    tokenExpiresAt.current = Date.now() + 3600 * 1000;
+    if (urlToken) {
+      log("token_received_from_url", { tokenLength: urlToken.length });
+      setToken(urlToken);
+      setTokenExpiry(Date.now() + 3600 * 1000);
+    } else {
+      log("token_restored_from_storage");
+    }
 
-    validateToken(urlToken).then(({ valid, premium }) => {
+    validateToken(activeToken).then(({ valid, premium }) => {
       if (!valid) {
         log("initial_token_invalid");
-        // Don't clear immediately — the token might still work for some endpoints
-        // Only show a warning
         toast({
           title: "Spotify Connection Issue",
           description: "Some features may be limited. Try disconnecting and reconnecting from Profile.",
@@ -174,9 +202,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       }
     }).catch((err) => {
       log("token_validation_error", { error: String(err) });
-      // Token was already set — don't block the user
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Returns a valid token, refreshing first if expired */
   const ensureToken = useCallback(async (): Promise<string | null> => {
@@ -200,7 +227,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       log("token_refresh_success", { premium });
       setToken(freshToken);
       setIsPremium(premium);
-      tokenExpiresAt.current = Date.now() + 3600 * 1000;
+      setTokenExpiry(Date.now() + 3600 * 1000);
       return freshToken;
     } catch (err) {
       log("token_refresh_failed", { error: String(err) });
@@ -469,7 +496,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         }
         setToken(currentToken);
         setIsPremium(premium);
-        tokenExpiresAt.current = Date.now() + 3600 * 1000;
+        setTokenExpiry(Date.now() + 3600 * 1000);
 
         if (!premium) {
           log("play_retry_not_premium");
@@ -500,9 +527,36 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
     if (res.status === 404) {
       log("play_404_device_lost", { deviceId });
-      const trackId = uri.replace("spotify:track:", "");
       
+      // Try to transfer playback to our device and retry
+      if (currentToken && deviceId) {
+        try {
+          log("play_404_transferring_device", { deviceId });
+          await fetch("https://api.spotify.com/v1/me/player", {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ device_ids: [deviceId], play: false }),
+          });
+          // Wait for transfer to complete
+          await new Promise((r) => setTimeout(r, 1500));
+          const retryRes = await spotifyPlayRequest(currentToken, deviceId, uri);
+          if (retryRes.ok || retryRes.status === 204) {
+            log("play_404_retry_success");
+            stopPreview();
+            setNowPlaying({ trackUri: uri, title, artist, cover });
+            return;
+          }
+          log("play_404_retry_failed", { status: retryRes.status });
+        } catch (e) {
+          log("play_404_transfer_error", { error: String(e) });
+        }
+      }
+
       // Fallback: play 30s preview in-app
+      const trackId = uri.replace("spotify:track:", "");
       if (currentToken) {
         const previewOk = await playPreview(trackId, uri, title, artist, cover, currentToken);
         if (previewOk) return;
