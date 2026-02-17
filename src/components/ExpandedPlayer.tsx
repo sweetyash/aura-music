@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Heart, ExternalLink, Play, Pause, SkipBack, SkipForward, Music } from "lucide-react";
+import { ChevronDown, Heart, ExternalLink, Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import album1 from "@/assets/album-1.jpg";
 
@@ -15,7 +15,7 @@ function formatTime(seconds: number): string {
 }
 
 const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
-  const { nowPlaying, isPlaying, progress, duration, togglePlayback, seek } = useSpotify();
+  const { nowPlaying, isPlaying, progress, duration, togglePlayback, seek, skipNext, skipPrev } = useSpotify();
   const [liked, setLiked] = useState(false);
 
   if (!open) return null;
@@ -24,7 +24,6 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
   const title = nowPlaying?.title || "No track selected";
   const artist = nowPlaying?.artist || "Connect Spotify";
   const trackId = nowPlaying?.trackId || "";
-  const hasPreview = !!nowPlaying?.previewUrl;
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -109,38 +108,21 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
 
         {/* Controls */}
         <div className="flex items-center justify-center gap-8 mb-4">
-          <button className="p-2 text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={skipPrev} className="p-2 text-muted-foreground hover:text-foreground transition-colors">
             <SkipBack size={24} fill="currentColor" />
           </button>
 
-          {hasPreview ? (
-            <button
-              onClick={togglePlayback}
-              className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 active:scale-95 transition-transform"
-            >
-              {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} className="ml-1" fill="currentColor" />}
-            </button>
-          ) : (
-            <a
-              href={trackId ? `https://open.spotify.com/track/${trackId}` : "https://open.spotify.com"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 active:scale-95 transition-transform"
-            >
-              <Play size={28} className="ml-1" fill="currentColor" />
-            </a>
-          )}
+          <button
+            onClick={togglePlayback}
+            className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 active:scale-95 transition-transform"
+          >
+            {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} className="ml-1" fill="currentColor" />}
+          </button>
 
-          <button className="p-2 text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={skipNext} className="p-2 text-muted-foreground hover:text-foreground transition-colors">
             <SkipForward size={24} fill="currentColor" />
           </button>
         </div>
-
-        {!hasPreview && nowPlaying && (
-          <p className="text-xs text-muted-foreground text-center">
-            Opens in Spotify · <a href={`https://open.spotify.com/track/${trackId}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Full track</a>
-          </p>
-        )}
       </div>
     </div>
   );
