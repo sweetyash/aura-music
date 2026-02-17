@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.spotify-refresh]
 verify_jwt = false
+
+[functions.spotify-api]
+verify_jwt = false
+
+[functions.ai-recommendations]
+verify_jwt = false

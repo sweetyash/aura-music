@@ -10,6 +10,7 @@ import Discover from "@/pages/Discover";
 import Trending from "@/pages/Trending";
 import NewReleases from "@/pages/NewReleases";
 import LikedSongs from "@/pages/LikedSongs";
+import Playlists from "@/pages/Playlists";
 import Profile from "@/pages/Profile";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
               <Route path="/trending" element={<Trending />} />
               <Route path="/new-releases" element={<NewReleases />} />
               <Route path="/liked" element={<LikedSongs />} />
+              <Route path="/playlists" element={<Playlists />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

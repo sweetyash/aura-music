@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Compass, TrendingUp, Disc3, Heart, User } from "lucide-react";
+import { Compass, TrendingUp, Clock, Heart, ListMusic, User } from "lucide-react";
 
 const tabs = [
   { path: "/", icon: Compass, label: "Discover" },
-  { path: "/trending", icon: TrendingUp, label: "Trending" },
-  { path: "/new-releases", icon: Disc3, label: "New" },
+  { path: "/trending", icon: TrendingUp, label: "Top" },
+  { path: "/new-releases", icon: Clock, label: "Recent" },
   { path: "/liked", icon: Heart, label: "Liked" },
+  { path: "/playlists", icon: ListMusic, label: "Playlists" },
   { path: "/profile", icon: User, label: "Profile" },
 ];
 
@@ -21,15 +22,15 @@ const BottomNav = () => {
             <NavLink
               key={path}
               to={path}
-              className="flex flex-col items-center gap-0.5 px-3 py-1 transition-colors"
+              className="flex flex-col items-center gap-0.5 px-2 py-1 transition-colors"
             >
               <Icon
-                size={22}
+                size={20}
                 className={isActive ? "text-primary" : "text-muted-foreground"}
                 fill={isActive && label === "Liked" ? "currentColor" : "none"}
               />
               <span
-                className={`text-[10px] font-medium ${
+                className={`text-[9px] font-medium ${
                   isActive ? "text-primary" : "text-muted-foreground"
                 }`}
               >
