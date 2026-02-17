@@ -60,6 +60,11 @@ function loadSpotifySdk(): Promise<void> {
   });
 }
 
+/** Structured logger for Spotify events */
+const log = (event: string, data?: Record<string, unknown>) => {
+  console.log(`[Spotify] ${event}`, data ? JSON.stringify(data) : "");
+};
+
 /** Validate token and check Premium status via Spotify /v1/me */
 async function validateToken(accessToken: string): Promise<{ valid: boolean; premium: boolean }> {
   try {
@@ -67,14 +72,19 @@ async function validateToken(accessToken: string): Promise<{ valid: boolean; pre
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (res.status === 401 || res.status === 403) {
+      log("token_validation_failed", { status: res.status });
       return { valid: false, premium: false };
     }
     if (!res.ok) {
+      log("token_validation_error", { status: res.status });
       return { valid: false, premium: false };
     }
     const data = await res.json();
-    return { valid: true, premium: data.product === "premium" };
-  } catch {
+    const premium = data.product === "premium";
+    log("token_validated", { premium, userId: data.id });
+    return { valid: true, premium };
+  } catch (err) {
+    log("token_validation_exception", { error: String(err) });
     return { valid: false, premium: false };
   }
 }
@@ -91,6 +101,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   /** Clear all Spotify state */
   const clearState = useCallback(() => {
+    log("state_cleared");
     playerRef.current?.disconnect();
     playerRef.current = null;
     setToken(null);
@@ -109,6 +120,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
     validateToken(urlToken).then(({ valid, premium }) => {
       if (!valid) {
+        log("initial_token_invalid");
         toast({
           title: "Spotify Login Failed",
           description: "The access token is invalid or permissions were revoked. Please try again.",
@@ -116,6 +128,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         });
         return;
       }
+      log("initial_token_valid", { premium });
       setToken(urlToken);
       setIsPremium(premium);
       tokenExpiresAt.current = Date.now() + 3600 * 1000;
@@ -135,11 +148,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (token && tokenExpiresAt.current > Date.now() + 60_000) {
       return token;
     }
+    log("token_refresh_started", { reason: token ? "expiring_soon" : "no_token" });
     try {
       const freshToken = await refreshSpotifyToken();
-      // Validate the refreshed token
       const { valid, premium } = await validateToken(freshToken);
       if (!valid) {
+        log("token_refresh_invalid");
         toast({
           title: "Spotify Permissions Revoked",
           description: "Your Spotify access was revoked. Please reconnect.",
@@ -148,11 +162,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         clearState();
         return null;
       }
+      log("token_refresh_success", { premium });
       setToken(freshToken);
       setIsPremium(premium);
       tokenExpiresAt.current = Date.now() + 3600 * 1000;
       return freshToken;
-    } catch {
+    } catch (err) {
+      log("token_refresh_failed", { error: String(err) });
       clearState();
       return null;
     }
@@ -180,11 +196,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       });
 
       player.addListener("initialization_error", ({ message }: { message: string }) => {
-        console.error("[Spotify] Initialization error:", message);
+        log("sdk_initialization_error", { message });
       });
 
       player.addListener("authentication_error", ({ message }: { message: string }) => {
-        console.error("[Spotify] Auth error:", message);
+        log("sdk_authentication_error", { message });
         toast({
           title: "Spotify Access Revoked",
           description: "Your Spotify session is no longer valid. Please reconnect from your Profile.",
@@ -194,7 +210,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       });
 
       player.addListener("account_error", ({ message }: { message: string }) => {
-        console.error("[Spotify] Account error:", message);
+        log("sdk_account_error", { message });
         setIsPremium(false);
         toast({
           title: "Spotify Premium Required",
@@ -204,23 +220,30 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       });
 
       player.addListener("playback_error", ({ message }: { message: string }) => {
-        console.error("[Spotify] Playback error:", message);
+        log("sdk_playback_error", { message });
       });
 
       player.addListener("ready", ({ device_id }: { device_id: string }) => {
-        console.log("[Spotify] Player ready, device:", device_id);
+        log("device_connected", { device_id });
         setDeviceId(device_id);
         setPlayerReady(true);
       });
 
-      player.addListener("not_ready", () => setPlayerReady(false));
+      player.addListener("not_ready", ({ device_id }: { device_id: string }) => {
+        log("device_not_ready", { device_id });
+        setPlayerReady(false);
+      });
 
       player.addListener("player_state_changed", (state: any) => {
         if (!state) {
+          log("playback_state", { paused: true, reason: "no_state" });
           setIsPlaying(false);
           return;
         }
-        setIsPlaying(!state.paused);
+        const paused = state.paused;
+        const trackName = state.track_window?.current_track?.name;
+        log("playback_state", { paused, track: trackName });
+        setIsPlaying(!paused);
       });
 
       player.connect();
@@ -270,8 +293,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const playTrack = useCallback(async (uri: string, title: string, artist: string, cover: string) => {
-    // Premium gate
+    log("play_requested", { uri, title });
+
+    // Premium gate — prevents 403
     if (isPremium === false) {
+      log("play_blocked", { reason: "not_premium" });
       toast({
         title: "Spotify Premium Required",
         description: "Full track playback needs a Premium subscription. Visit spotify.com/premium to upgrade.",
@@ -281,25 +307,46 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!deviceId) {
+      log("play_blocked", { reason: "no_device" });
       toast({ title: "Player not ready", description: "Please wait for Spotify to connect or log in first.", variant: "destructive" });
       return;
     }
 
+    // Pre-validate token + Premium to prevent 403
     let currentToken = await ensureToken();
     if (!currentToken) {
+      log("play_blocked", { reason: "no_valid_token" });
       toast({ title: "Session Expired", description: "Please reconnect Spotify from your Profile.", variant: "destructive" });
       return;
     }
 
+    // Re-check Premium status before play (prevents 403 from stale isPremium)
+    if (isPremium === null) {
+      const { valid, premium } = await validateToken(currentToken);
+      if (!valid) {
+        log("play_blocked", { reason: "token_invalid_pre_play" });
+        clearState();
+        return;
+      }
+      setIsPremium(premium);
+      if (!premium) {
+        log("play_blocked", { reason: "premium_check_failed" });
+        toast({ title: "Spotify Premium Required", description: "Upgrade to Premium for playback.", variant: "destructive" });
+        return;
+      }
+    }
+
+    log("play_api_call", { uri, deviceId });
     let res = await spotifyPlayRequest(currentToken, deviceId, uri);
 
     // 401 → refresh and retry once
     if (res.status === 401) {
-      console.log("[Spotify] Token expired during playback, refreshing…");
+      log("play_401_retry");
       try {
         currentToken = await refreshSpotifyToken();
         const { valid, premium } = await validateToken(currentToken);
         if (!valid) {
+          log("play_retry_token_invalid");
           toast({ title: "Spotify Access Revoked", description: "Please reconnect from your Profile.", variant: "destructive" });
           clearState();
           return;
@@ -309,12 +356,14 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         tokenExpiresAt.current = Date.now() + 3600 * 1000;
 
         if (!premium) {
+          log("play_retry_not_premium");
           toast({ title: "Spotify Premium Required", description: "Your account no longer has Premium. Playback is unavailable.", variant: "destructive" });
           return;
         }
 
         res = await spotifyPlayRequest(currentToken, deviceId, uri);
       } catch {
+        log("play_retry_refresh_failed");
         toast({ title: "Session Expired", description: "Could not refresh token. Please reconnect Spotify.", variant: "destructive" });
         clearState();
         return;
@@ -324,6 +373,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));
       const reason = body?.error?.reason;
+      log("play_403", { reason, body });
       if (reason === "PREMIUM_REQUIRED") {
         setIsPremium(false);
         toast({ title: "Spotify Premium Required", description: "This feature requires a Premium subscription.", variant: "destructive" });
@@ -333,23 +383,27 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     if (res.status === 404) {
+      log("play_404_device_lost", { deviceId });
       toast({ title: "Device Not Found", description: "The player device was lost. Reconnecting…", variant: "destructive" });
       playerRef.current?.connect();
       return;
     }
     if (!res.ok) {
-      await res.text();
+      const errBody = await res.text();
+      log("play_error", { status: res.status, body: errBody });
       toast({ title: "Playback Error", description: "Could not start playback. Please try again.", variant: "destructive" });
       return;
     }
 
+    log("play_started", { uri, title });
     setNowPlaying({ trackUri: uri, title, artist, cover });
   }, [deviceId, isPremium, ensureToken, spotifyPlayRequest, clearState]);
 
   const togglePlayback = useCallback(async () => {
     if (!playerRef.current) return;
+    log("toggle_playback", { wasPlaying: isPlaying });
     await playerRef.current.togglePlay();
-  }, []);
+  }, [isPlaying]);
 
   return (
     <SpotifyContext.Provider
