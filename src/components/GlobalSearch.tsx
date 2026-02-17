@@ -29,7 +29,7 @@ const GlobalSearch = ({ active, onActiveChange }: Props) => {
   const { search } = useSpotifyApi();
 
   useEffect(() => {
-    if (!query.trim() || !isConnected) {
+    if (!query.trim() || query.trim().length < 3 || !isConnected) {
       if (!query.trim()) {
         setResults([]);
         setSearched(false);
