@@ -19,6 +19,8 @@ Deno.serve(async (req) => {
       "streaming",
       "user-read-playback-state",
       "user-modify-playback-state",
+      "user-read-private",
+      "user-read-email",
     ].join(" ");
 
     // Extract user_id from auth header to pass as state
