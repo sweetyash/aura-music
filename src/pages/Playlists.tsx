@@ -81,7 +81,7 @@ const Playlists = () => {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-foreground truncate">{selectedPlaylist.name}</h1>
-            <p className="text-xs text-muted-foreground">{selectedPlaylist.tracks.total} tracks · {selectedPlaylist.owner.display_name}</p>
+            <p className="text-xs text-muted-foreground">{selectedPlaylist.tracks?.total || 0} tracks · {selectedPlaylist.owner?.display_name || "You"}</p>
           </div>
         </div>
 
@@ -179,7 +179,7 @@ const Playlists = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate">{playlist.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{playlist.tracks.total} tracks · {playlist.owner.display_name}</p>
+                <p className="text-xs text-muted-foreground truncate">{playlist.tracks?.total || 0} tracks · {playlist.owner?.display_name || "You"}</p>
               </div>
               <ChevronRight size={16} className="text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
             </div>
