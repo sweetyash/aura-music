@@ -5,79 +5,59 @@ import ExpandedPlayer from "@/components/ExpandedPlayer";
 import album1 from "@/assets/album-1.jpg";
 
 const MiniPlayer = () => {
-  const { isConnected, isPremium, isPlaying, nowPlaying, playerReady, connect, togglePlayback, progress, duration } = useSpotify();
+  const { isConnected, isPremium, isPlaying, nowPlaying, connect, togglePlayback } = useSpotify();
   const [expanded, setExpanded] = useState(false);
-
-  const handlePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isConnected) {
-      connect();
-      return;
-    }
-    togglePlayback();
-  };
 
   const cover = nowPlaying?.cover || album1;
   const title = nowPlaying?.title || "No track selected";
   const artist = nowPlaying?.artist || "Connect Spotify to play";
-  const showPremiumWarning = isConnected && isPremium === false;
-  const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
+  const showPremiumWarning = false; // Embed works for all accounts
+  const trackId = nowPlaying?.trackId || "";
 
   return (
     <>
       <ExpandedPlayer open={expanded} onClose={() => setExpanded(false)} />
-      <div className="fixed bottom-16 left-0 right-0 z-40">
-        {showPremiumWarning && (
-          <div className="bg-destructive/10 border-t border-destructive/20 px-3 py-1.5">
-            <div className="max-w-lg mx-auto flex items-center gap-2">
-              <AlertTriangle size={13} className="text-destructive flex-shrink-0" />
-              <p className="text-[11px] text-destructive">
-                Premium required for full playback.{" "}
-                <a href="https://spotify.com/premium" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
-                  Upgrade
-                </a>
-              </p>
-            </div>
-          </div>
-        )}
-        <div className="glass border-t border-border cursor-pointer" onClick={() => setExpanded(true)}>
-          {/* Progress bar */}
-          <div className="h-0.5 bg-secondary">
-            <div
-              className="h-full gradient-primary transition-all duration-200"
-              style={{ width: `${progressPct}%` }}
+      
+      {/* Hidden Spotify embed for playback */}
+      {trackId && !expanded && (
+        <div className="fixed bottom-28 left-0 right-0 z-30 px-3">
+          <div className="max-w-lg mx-auto rounded-xl overflow-hidden shadow-xl">
+            <iframe
+              key={trackId}
+              src={`https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`}
+              width="100%"
+              height="80"
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              className="rounded-xl border-0"
+              title="Spotify Player"
             />
           </div>
+        </div>
+      )}
+
+      <div className="fixed bottom-16 left-0 right-0 z-40">
+        <div className="glass border-t border-border cursor-pointer" onClick={() => setExpanded(true)}>
           <div className="px-3 py-2">
             <div className="max-w-lg mx-auto flex items-center gap-3">
               <img src={cover} alt="Now playing" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
 
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate">{title}</p>
-                <p className="text-[11px] text-muted-foreground truncate">
-                  {artist}
-                  {nowPlaying?.previewMode && (
-                    <span className="ml-1 text-primary/70">· Preview</span>
-                  )}
-                </p>
+                <p className="text-[11px] text-muted-foreground truncate">{artist}</p>
               </div>
 
-              <button
-                onClick={handlePlay}
-                disabled={(isConnected && !playerReady && !nowPlaying) || showPremiumWarning}
-                className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20 disabled:opacity-50"
-              >
-                {!isConnected ? (
+              {!isConnected && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); connect(); }}
+                  className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
+                >
                   <Lock size={14} />
-                ) : isPlaying ? (
-                  <Pause size={16} fill="currentColor" />
-                ) : (
-                  <Play size={16} fill="currentColor" className="ml-0.5" />
-                )}
-              </button>
+                </button>
+              )}
 
               <a
-                href={nowPlaying ? `https://open.spotify.com/track/${nowPlaying.trackUri.replace("spotify:track:", "")}` : "https://open.spotify.com"}
+                href={trackId ? `https://open.spotify.com/track/${trackId}` : "https://open.spotify.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
