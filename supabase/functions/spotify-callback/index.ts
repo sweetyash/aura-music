@@ -15,9 +15,9 @@ Deno.serve(async (req) => {
       return Response.redirect(redirectTo.toString(), 302);
     }
 
-    if (!code || !userId || userId === "anonymous") {
+    if (!code) {
       return new Response(
-        JSON.stringify({ error: "Missing authorization code or user context." }),
+        JSON.stringify({ error: "Missing authorization code." }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -53,35 +53,33 @@ Deno.serve(async (req) => {
     const { access_token, refresh_token, expires_in } = tokenData;
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    // Save tokens using service role
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { error: dbError } = await supabase
-      .from("spotify_tokens")
-      .upsert(
-        {
-          user_id: userId,
-          access_token,
-          refresh_token,
-          expires_at: expiresAt,
-        },
-        { onConflict: "user_id" }
+    // Save tokens only if we have a real user
+    if (userId && userId !== "anonymous") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
-    if (dbError) {
-      console.error("[spotify-callback] DB error:", dbError.message);
-      return new Response(
-        JSON.stringify({ error: "Internal error saving your credentials." }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      const { error: dbError } = await supabase
+        .from("spotify_tokens")
+        .upsert(
+          {
+            user_id: userId,
+            access_token,
+            refresh_token,
+            expires_at: expiresAt,
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (dbError) {
+        console.error("[spotify-callback] DB error:", dbError.message);
+      }
     }
 
-    // Redirect back to the app — use referer or fallback
-    const origin = req.headers.get("origin") || req.headers.get("referer") || "/";
-    const redirectTo = new URL("/", origin.startsWith("http") ? origin : `https://${origin}`);
+    // Redirect back to the app
+    const appOrigin = Deno.env.get("APP_ORIGIN") || "https://id-preview--1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovable.app";
+    const redirectTo = new URL("/", appOrigin);
     redirectTo.searchParams.set("spotify_token", access_token);
 
     return Response.redirect(redirectTo.toString(), 302);
