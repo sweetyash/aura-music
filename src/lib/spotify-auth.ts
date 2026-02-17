@@ -2,7 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 /** Initiate Spotify login – opens Spotify authorize page */
 export async function loginWithSpotify() {
-  const { data, error } = await supabase.functions.invoke("spotify-login");
+  const { data, error } = await supabase.functions.invoke("spotify-login", {
+    body: { origin: window.location.origin },
+  });
   if (error) throw error;
   window.location.href = data.url;
 }

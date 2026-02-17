@@ -5,11 +5,16 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const error = url.searchParams.get("error");
-    const userId = url.searchParams.get("state");
+    const stateParam = url.searchParams.get("state");
+
+    // Decode origin from state
+    let appOrigin = "https://1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovableproject.com";
+    try {
+      if (stateParam) appOrigin = atob(stateParam);
+    } catch {}
 
     // Handle Spotify denied/revoked permissions
     if (error) {
-      const appOrigin = Deno.env.get("APP_ORIGIN") || "https://lovable.app";
       const redirectTo = new URL("/", appOrigin);
       redirectTo.searchParams.set("spotify_error", error === "access_denied" ? "denied" : "error");
       return Response.redirect(redirectTo.toString(), 302);
@@ -53,32 +58,9 @@ Deno.serve(async (req) => {
     const { access_token, refresh_token, expires_in } = tokenData;
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    // Save tokens only if we have a real user
-    if (userId && userId !== "anonymous") {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+    // Token storage skipped (no authenticated user in this flow)
 
-      const { error: dbError } = await supabase
-        .from("spotify_tokens")
-        .upsert(
-          {
-            user_id: userId,
-            access_token,
-            refresh_token,
-            expires_at: expiresAt,
-          },
-          { onConflict: "user_id" }
-        );
-
-      if (dbError) {
-        console.error("[spotify-callback] DB error:", dbError.message);
-      }
-    }
-
-    // Redirect back to the app
-    const appOrigin = Deno.env.get("APP_ORIGIN") || "https://1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovableproject.com";
+    // Redirect back to the app using origin from state
     const redirectTo = new URL("/", appOrigin);
     redirectTo.searchParams.set("spotify_token", access_token);
 

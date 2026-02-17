@@ -23,20 +23,15 @@ Deno.serve(async (req) => {
       "user-read-email",
     ].join(" ");
 
-    // Extract user_id from auth header to pass as state
-    const authHeader = req.headers.get("Authorization");
-    let state = "anonymous";
-    if (authHeader?.startsWith("Bearer ")) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const { data } = await supabase.auth.getClaims(authHeader.replace("Bearer ", ""));
-      if (data?.claims?.sub) {
-        state = data.claims.sub as string;
-      }
-    }
+    // Extract origin from request body so callback knows where to redirect
+    let appOrigin = "https://1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovableproject.com";
+    try {
+      const body = await req.json();
+      if (body?.origin) appOrigin = body.origin;
+    } catch {}
+
+    // Encode origin in state (base64)
+    const state = btoa(appOrigin);
 
     const params = new URLSearchParams({
       response_type: "code",
