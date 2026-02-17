@@ -52,7 +52,7 @@ const Playlists = () => {
   };
 
   const handlePlay = (t: SpotifyTrack) => {
-    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t));
+    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t), t.preview_url, t.duration_ms);
   };
 
   if (!isConnected) {

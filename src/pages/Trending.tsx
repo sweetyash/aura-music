@@ -26,7 +26,7 @@ const Trending = () => {
   }, [isConnected, timeRange, getTopTracks]);
 
   const handlePlay = (track: SpotifyTrack) => {
-    playTrack(track.uri, track.name, track.artists[0]?.name || "Unknown", getTrackCover(track));
+    playTrack(track.uri, track.name, track.artists[0]?.name || "Unknown", getTrackCover(track), track.preview_url, track.duration_ms);
   };
 
   if (!isConnected) {

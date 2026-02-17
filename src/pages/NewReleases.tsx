@@ -20,7 +20,7 @@ const NewReleases = () => {
 
   const handlePlay = (item: RecentTrack) => {
     const t = item.track;
-    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t));
+    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t), t.preview_url, t.duration_ms);
   };
 
   const formatTime = (iso: string) => {

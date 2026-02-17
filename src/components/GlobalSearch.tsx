@@ -62,7 +62,7 @@ const GlobalSearch = ({ active, onActiveChange }: Props) => {
   };
 
   const handlePlay = (track: SpotifyTrack) => {
-    playTrack(track.uri, track.name, track.artists[0]?.name || "Unknown", getTrackCover(track));
+    playTrack(track.uri, track.name, track.artists[0]?.name || "Unknown", getTrackCover(track), track.preview_url, track.duration_ms);
   };
 
   return (

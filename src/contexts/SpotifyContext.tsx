@@ -8,6 +8,8 @@ interface NowPlaying {
   title: string;
   artist: string;
   cover: string;
+  previewUrl: string | null;
+  durationMs: number;
 }
 
 interface SpotifyAuthCtx {
@@ -22,8 +24,9 @@ interface SpotifyAuthCtx {
   connect: () => Promise<void>;
   refresh: () => Promise<void>;
   disconnect: () => void;
-  playTrack: (uri: string, title: string, artist: string, cover: string) => void;
+  playTrack: (uri: string, title: string, artist: string, cover: string, previewUrl?: string | null, durationMs?: number) => void;
   togglePlayback: () => void;
+  seek: (time: number) => void;
 }
 
 const SpotifyContext = createContext<SpotifyAuthCtx>({
@@ -40,6 +43,7 @@ const SpotifyContext = createContext<SpotifyAuthCtx>({
   disconnect: () => {},
   playTrack: () => {},
   togglePlayback: () => {},
+  seek: () => {},
 });
 
 export const useSpotify = () => useContext(SpotifyContext);
@@ -53,16 +57,10 @@ async function validateToken(accessToken: string): Promise<{ valid: boolean; pre
     const res = await fetch("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (!res.ok) {
-      log("token_validation_failed", { status: res.status });
-      return { valid: false, premium: false };
-    }
+    if (!res.ok) return { valid: false, premium: false };
     const data = await res.json();
-    const premium = data.product === "premium";
-    log("token_validated", { premium, userId: data.id });
-    return { valid: true, premium };
-  } catch (err) {
-    log("token_validation_exception", { error: String(err) });
+    return { valid: true, premium: data.product === "premium" };
+  } catch {
     return { valid: false, premium: false };
   }
 }
@@ -85,6 +83,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const tokenExpiresAt = useRef<number>(Number(localStorage.getItem(STORAGE_KEY_EXPIRES) || "0"));
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setToken = useCallback((t: string | null) => {
     setTokenState(t);
@@ -101,8 +101,20 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(STORAGE_KEY_EXPIRES, String(exp));
   }, []);
 
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+  }, []);
+
   const clearState = useCallback(() => {
-    log("state_cleared");
+    stopAudio();
     setToken(null);
     setIsPremium(null);
     setIsPlaying(false);
@@ -110,71 +122,49 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setProgress(0);
     setDuration(0);
     setTokenExpiry(0);
-  }, [setToken, setTokenExpiry]);
+  }, [setToken, setTokenExpiry, stopAudio]);
 
   // On mount, check for callback token in URL OR restore from localStorage
   useEffect(() => {
     const urlToken = extractSpotifyTokenFromUrl();
     const activeToken = urlToken || token;
-
     if (!activeToken) return;
 
     if (urlToken) {
-      log("token_received_from_url", { tokenLength: urlToken.length });
       setToken(urlToken);
       setTokenExpiry(Date.now() + 3600 * 1000);
-    } else {
-      log("token_restored_from_storage");
     }
 
     validateToken(activeToken).then(({ valid, premium }) => {
       if (!valid) {
-        log("initial_token_invalid");
-        toast({
-          title: "Spotify Connection Issue",
-          description: "Try disconnecting and reconnecting from Profile.",
-          variant: "destructive",
-        });
+        toast({ title: "Spotify Connection Issue", description: "Try disconnecting and reconnecting from Profile.", variant: "destructive" });
         return;
       }
-      log("initial_token_valid", { premium });
       setIsPremium(premium);
-    }).catch((err) => {
-      log("token_validation_error", { error: String(err) });
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ensureToken = useCallback(async (): Promise<string | null> => {
-    if (token && tokenExpiresAt.current > Date.now() + 60_000) {
-      return token;
-    }
+    if (token && tokenExpiresAt.current > Date.now() + 60_000) return token;
     try {
       const freshToken = await refreshSpotifyToken();
       const { valid, premium } = await validateToken(freshToken);
-      if (!valid) {
-        clearState();
-        return null;
-      }
+      if (!valid) { clearState(); return null; }
       setToken(freshToken);
       setIsPremium(premium);
       setTokenExpiry(Date.now() + 3600 * 1000);
       return freshToken;
-    } catch (err) {
-      log("token_refresh_failed", { error: String(err) });
+    } catch {
       clearState();
       return null;
     }
   }, [token, clearState, setToken, setTokenExpiry]);
 
-  const connect = useCallback(async () => {
-    await loginWithSpotify();
-  }, []);
+  const connect = useCallback(async () => { await loginWithSpotify(); }, []);
 
   const refresh = useCallback(async () => {
     const fresh = await ensureToken();
-    if (!fresh) {
-      toast({ title: "Refresh Failed", description: "Please reconnect Spotify.", variant: "destructive" });
-    }
+    if (!fresh) toast({ title: "Refresh Failed", description: "Please reconnect Spotify.", variant: "destructive" });
   }, [ensureToken]);
 
   const disconnect = useCallback(() => {
@@ -182,19 +172,80 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Spotify Disconnected", description: "You have been disconnected from Spotify." });
   }, [clearState]);
 
-  // Play track using Spotify Embed — just set nowPlaying state
-  const playTrack = useCallback((uri: string, title: string, artist: string, cover: string) => {
-    const trackId = uri.replace("spotify:track:", "");
-    log("play_track", { trackId, title });
-    setNowPlaying({ trackUri: uri, trackId, title, artist, cover });
-    setIsPlaying(true);
-    setProgress(0);
-    setDuration(30); // Embed previews are ~30s
+  const startProgressTracking = useCallback(() => {
+    if (progressInterval.current) clearInterval(progressInterval.current);
+    progressInterval.current = setInterval(() => {
+      if (audioRef.current) {
+        setProgress(audioRef.current.currentTime);
+        setDuration(audioRef.current.duration || 0);
+      }
+    }, 250);
   }, []);
 
+  const playTrack = useCallback((uri: string, title: string, artist: string, cover: string, previewUrl?: string | null, durationMs?: number) => {
+    const trackId = uri.replace("spotify:track:", "");
+    log("play_track", { trackId, title, hasPreview: !!previewUrl });
+
+    stopAudio();
+
+    const np: NowPlaying = { trackUri: uri, trackId, title, artist, cover, previewUrl: previewUrl || null, durationMs: durationMs || 0 };
+    setNowPlaying(np);
+
+    if (previewUrl) {
+      const audio = new Audio(previewUrl);
+      audioRef.current = audio;
+      audio.volume = 1;
+
+      audio.addEventListener("canplay", () => {
+        audio.play().catch(() => {});
+        setIsPlaying(true);
+        startProgressTracking();
+      });
+
+      audio.addEventListener("ended", () => {
+        setIsPlaying(false);
+        setProgress(0);
+        if (progressInterval.current) clearInterval(progressInterval.current);
+      });
+
+      audio.addEventListener("error", () => {
+        log("audio_error", { trackId });
+        setIsPlaying(false);
+      });
+
+      audio.load();
+    } else {
+      // No preview available — show track info but can't play
+      setIsPlaying(false);
+      setProgress(0);
+      setDuration(durationMs ? durationMs / 1000 : 0);
+    }
+  }, [stopAudio, startProgressTracking]);
+
   const togglePlayback = useCallback(() => {
-    setIsPlaying((prev) => !prev);
+    if (!audioRef.current) return;
+    if (audioRef.current.paused) {
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
+      startProgressTracking();
+    } else {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      if (progressInterval.current) clearInterval(progressInterval.current);
+    }
+  }, [startProgressTracking]);
+
+  const seek = useCallback((time: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setProgress(time);
+    }
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { stopAudio(); };
+  }, [stopAudio]);
 
   return (
     <SpotifyContext.Provider
@@ -202,7 +253,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         token,
         isConnected: !!token,
         isPremium,
-        playerReady: true, // Always ready — embed handles playback
+        playerReady: true,
         isPlaying,
         nowPlaying,
         progress,
@@ -212,6 +263,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         disconnect,
         playTrack,
         togglePlayback,
+        seek,
       }}
     >
       {children}
