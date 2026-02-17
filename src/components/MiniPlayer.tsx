@@ -17,24 +17,6 @@ const MiniPlayer = () => {
   return (
     <>
       <ExpandedPlayer open={expanded} onClose={() => setExpanded(false)} />
-      
-      {/* Hidden Spotify embed for playback */}
-      {trackId && !expanded && (
-        <div className="fixed bottom-28 left-0 right-0 z-30 px-3">
-          <div className="max-w-lg mx-auto rounded-xl overflow-hidden shadow-xl">
-            <iframe
-              key={trackId}
-              src={`https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`}
-              width="100%"
-              height="80"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              className="rounded-xl border-0"
-              title="Spotify Player"
-            />
-          </div>
-        </div>
-      )}
 
       <div className="fixed bottom-16 left-0 right-0 z-40">
         <div className="glass border-t border-border cursor-pointer" onClick={() => setExpanded(true)}>
