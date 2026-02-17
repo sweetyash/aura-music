@@ -329,11 +329,10 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         const errorData = await res.json().catch(() => ({}));
         log("play_error", { status: res.status, error: errorData });
 
-        // If 403/premium required, fall back
+        // If 403/premium required, fall back to preview
         if (res.status === 403) {
-          toast({ title: "Premium Required", description: "Full playback requires Spotify Premium. Opening in Spotify...", variant: "destructive" });
-          window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
-          return;
+          log("sdk_403_fallback", { trackId });
+          // Don't return - fall through to preview/audio fallback below
         }
       } catch (err) {
         log("play_fetch_error", { error: String(err) });
@@ -356,22 +355,20 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       });
       audio.addEventListener("error", () => {
         log("audio_preview_error", { trackId });
-        toast({ title: "Preview unavailable", description: "Opening in Spotify...", variant: "destructive" });
-        window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
+        toast({ title: "Preview unavailable", description: "This track cannot be played in-app.", variant: "destructive" });
       });
 
       audio.play().then(() => {
         setIsPlaying(true);
         setDuration(audio.duration || 30);
       }).catch(() => {
-        window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
+        toast({ title: "Playback failed", description: "Could not play this track.", variant: "destructive" });
       });
       return;
     }
 
-    // Last fallback: open in Spotify
-    toast({ title: "Premium Required", description: "Full playback requires Spotify Premium. Opening track in Spotify.", variant: "destructive" });
-    window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
+    // Last fallback: show error, do NOT redirect
+    toast({ title: "Playback unavailable", description: "Waiting for player to connect. Try again in a moment.", variant: "destructive" });
   }, [startProgressTracking, stopAudioPreview]);
 
   const togglePlayback = useCallback(async () => {
