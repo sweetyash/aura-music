@@ -65,6 +65,7 @@ const Discover = () => {
   const hasDragged = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
+  const saveErrorShown = useRef(false);
 
   // Fetch personalized recommendations
   const fetchCards = useCallback(async () => {
@@ -175,8 +176,9 @@ const Discover = () => {
       // If swiped right (liked), save the track
       if (dir === "right" && card) {
         saveTrack(card.id).catch((err) => {
-          if (err?.message?.includes("Forbidden") || err?.message?.includes("403")) {
-            toast({ title: "Permission denied", description: "Please disconnect & reconnect Spotify from Profile to grant library access.", variant: "destructive" });
+          if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
+            saveErrorShown.current = true;
+            toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
           }
         });
       }
@@ -193,8 +195,9 @@ const Discover = () => {
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) {
       saveTrack(card.id).catch((err) => {
-        if (err?.message?.includes("Forbidden") || err?.message?.includes("403")) {
-          toast({ title: "Permission denied", description: "Please disconnect & reconnect Spotify from Profile to grant library access.", variant: "destructive" });
+        if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
+          saveErrorShown.current = true;
+          toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
         }
       });
     }
