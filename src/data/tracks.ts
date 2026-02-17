@@ -15,6 +15,7 @@ export interface Track {
   year: number;
   popularity: number;
   releaseDate: string;
+  spotifyUri?: string;
 }
 
 export const mockTracks: Track[] = [
