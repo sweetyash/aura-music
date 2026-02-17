@@ -3,6 +3,7 @@ import { Heart, X, Play, Pause, Music, TrendingUp, Lock, Loader2, RefreshCw, Dis
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import GlobalSearch from "@/components/GlobalSearch";
+import { toast } from "@/hooks/use-toast";
 
 const SWIPE_THRESHOLD = 100;
 const ROTATION_FACTOR = 0.12;
@@ -145,7 +146,11 @@ const Discover = () => {
       setExitDir(dir);
       // If swiped right (liked), save the track
       if (dir === "right" && card) {
-        saveTrack(card.id).catch(() => {});
+        saveTrack(card.id).catch((err) => {
+          if (err?.message?.includes("Forbidden") || err?.message?.includes("403")) {
+            toast({ title: "Permission denied", description: "Please disconnect & reconnect Spotify from Profile to grant library access.", variant: "destructive" });
+          }
+        });
       }
       setTimeout(() => {
         setCurrentIndex((i) => i + 1);
@@ -159,7 +164,11 @@ const Discover = () => {
 
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) {
-      saveTrack(card.id).catch(() => {});
+      saveTrack(card.id).catch((err) => {
+        if (err?.message?.includes("Forbidden") || err?.message?.includes("403")) {
+          toast({ title: "Permission denied", description: "Please disconnect & reconnect Spotify from Profile to grant library access.", variant: "destructive" });
+        }
+      });
     }
     setExitDir(dir);
     setOffset({ x: dir === "right" ? 300 : -300, y: 0 });
