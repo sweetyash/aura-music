@@ -68,7 +68,7 @@ const Profile = () => {
       const data = await search(`${rec.name} ${rec.artist}`, "track", 1);
       const track = data.tracks?.items?.[0];
       if (track) {
-        playTrack(track.uri, track.name, track.artists[0]?.name || rec.artist, getTrackCover(track));
+        playTrack(track.uri, track.name, track.artists[0]?.name || rec.artist, getTrackCover(track), track.preview_url, track.duration_ms);
       } else {
         toast({ title: "Not Found", description: `"${rec.name}" not found on Spotify.`, variant: "destructive" });
       }

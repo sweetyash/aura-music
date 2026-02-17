@@ -18,6 +18,8 @@ interface DiscoverCard {
   popularity: number;
   uri: string;
   year: number;
+  previewUrl: string | null;
+  durationMs: number;
 }
 
 function trackToCard(t: SpotifyTrack): DiscoverCard {
@@ -31,6 +33,8 @@ function trackToCard(t: SpotifyTrack): DiscoverCard {
     popularity: t.popularity || 0,
     uri: t.uri,
     year: (t.album as any)?.release_date ? parseInt((t.album as any).release_date) : 0,
+    previewUrl: t.preview_url || null,
+    durationMs: t.duration_ms,
   };
 }
 
@@ -316,7 +320,7 @@ const Discover = () => {
                               if (isCurrentTrackPlaying) {
                                 togglePlayback();
                               } else {
-                                playTrack(card.uri, card.title, card.artist, card.cover);
+                                playTrack(card.uri, card.title, card.artist, card.cover, card.previewUrl, card.durationMs);
                               }
                             }}
                             className="flex items-center gap-2"
