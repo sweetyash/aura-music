@@ -121,10 +121,14 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
               {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} className="ml-1" fill="currentColor" />}
             </button>
           ) : (
-            <div className="w-16 h-16 rounded-full bg-secondary flex flex-col items-center justify-center">
-              <Music size={20} className="text-muted-foreground" />
-              <span className="text-[9px] text-muted-foreground mt-0.5">No preview</span>
-            </div>
+            <a
+              href={trackId ? `https://open.spotify.com/track/${trackId}` : "https://open.spotify.com"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 active:scale-95 transition-transform"
+            >
+              <Play size={28} className="ml-1" fill="currentColor" />
+            </a>
           )}
 
           <button className="p-2 text-muted-foreground hover:text-foreground transition-colors">
@@ -134,7 +138,7 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
 
         {!hasPreview && nowPlaying && (
           <p className="text-xs text-muted-foreground text-center">
-            Preview not available · <a href={`https://open.spotify.com/track/${trackId}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Listen on Spotify</a>
+            Opens in Spotify · <a href={`https://open.spotify.com/track/${trackId}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Full track</a>
           </p>
         )}
       </div>

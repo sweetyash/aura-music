@@ -38,11 +38,6 @@ const MiniPlayer = () => {
               {/* Album art */}
               <div className="relative w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
                 <img src={cover} alt="Now playing" className="w-full h-full object-cover" />
-                {nowPlaying && !nowPlaying.previewUrl && (
-                  <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-                    <Music size={14} className="text-muted-foreground" />
-                  </div>
-                )}
               </div>
 
               {/* Track info */}
@@ -66,6 +61,16 @@ const MiniPlayer = () => {
                 >
                   {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} className="ml-0.5" fill="currentColor" />}
                 </button>
+              ) : nowPlaying ? (
+                <a
+                  href={`https://open.spotify.com/track/${trackId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
+                >
+                  <Play size={15} className="ml-0.5" fill="currentColor" />
+                </a>
               ) : null}
 
               {/* Spotify link */}
