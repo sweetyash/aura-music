@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Pause, Lock, ExternalLink, Music } from "lucide-react";
+import { Play, Pause, Lock, ExternalLink } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import ExpandedPlayer from "@/components/ExpandedPlayer";
 import album1 from "@/assets/album-1.jpg";
@@ -54,23 +54,13 @@ const MiniPlayer = () => {
                 >
                   <Lock size={14} />
                 </button>
-              ) : nowPlaying?.previewUrl ? (
+              ) : nowPlaying ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); togglePlayback(); }}
                   className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
                 >
                   {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} className="ml-0.5" fill="currentColor" />}
                 </button>
-              ) : nowPlaying ? (
-                <a
-                  href={`https://open.spotify.com/track/${trackId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
-                >
-                  <Play size={15} className="ml-0.5" fill="currentColor" />
-                </a>
               ) : null}
 
               {/* Spotify link */}
