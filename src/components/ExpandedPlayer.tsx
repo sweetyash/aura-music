@@ -72,24 +72,10 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
           </div>
         </div>
 
-        {/* Spotify Embed Player */}
-        {trackId ? (
-          <div className="w-full rounded-xl overflow-hidden flex-1 min-h-0 max-h-[80px]">
-            <iframe
-              src={`https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`}
-              width="100%"
-              height="80"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              className="rounded-xl border-0"
-              title="Spotify Player"
-            />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-sm text-muted-foreground">Select a track to play</p>
-          </div>
-        )}
+        {/* Track info shown below art — embed is in MiniPlayer and stays persistent */}
+        <p className="text-xs text-muted-foreground text-center mt-2">
+          Playing via Spotify embed below
+        </p>
       </div>
     </div>
   );
