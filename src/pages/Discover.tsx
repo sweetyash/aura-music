@@ -58,6 +58,7 @@ const Discover = () => {
   const [searchActive, setSearchActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
+  const hasDragged = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
 
@@ -128,14 +129,20 @@ const Discover = () => {
 
   const handleStart = useCallback((clientX: number, clientY: number) => {
     startPos.current = { x: clientX, y: clientY };
+    hasDragged.current = false;
     setIsDragging(true);
   }, []);
 
   const handleMove = useCallback((clientX: number, clientY: number) => {
     if (!isDragging) return;
+    const dx = clientX - startPos.current.x;
+    const dy = clientY - startPos.current.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      hasDragged.current = true;
+    }
     setOffset({
-      x: clientX - startPos.current.x,
-      y: (clientY - startPos.current.y) * 0.3,
+      x: dx,
+      y: dy * 0.3,
     });
   }, [isDragging]);
 
@@ -305,6 +312,7 @@ const Discover = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (hasDragged.current) return;
                               if (isCurrentTrackPlaying) {
                                 togglePlayback();
                               } else {
