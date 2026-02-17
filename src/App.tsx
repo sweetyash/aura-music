@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
+import MiniPlayer from "@/components/MiniPlayer";
 import Discover from "@/pages/Discover";
 import Trending from "@/pages/Trending";
 import NewReleases from "@/pages/NewReleases";
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <MiniPlayer />
           <BottomNav />
         </div>
       </BrowserRouter>
