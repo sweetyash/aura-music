@@ -73,7 +73,7 @@ export function useSpotifyApi() {
   );
 
   const search = useCallback(
-    async (query: string, types = "track", limit = 20) => {
+    async (query: string, types = "track", limit = 10) => {
       const params = new URLSearchParams({ q: query, type: types, limit: String(limit) });
       return callApi(`/v1/search?${params}`);
     },
