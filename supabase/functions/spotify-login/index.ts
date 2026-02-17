@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     ].join(" ");
 
     // Extract origin from request body so callback knows where to redirect
-    let appOrigin = "https://1ba59472-62e4-40d4-93f8-e6fefe6a57a6.lovableproject.com";
+    let appOrigin = "";
     try {
       const body = await req.json();
       if (body?.origin) appOrigin = body.origin;
