@@ -44,7 +44,11 @@ Deno.serve(async (req) => {
 
     const res = await fetch(url, fetchOptions);
 
-    if (res.status === 204 || res.headers.get("content-length") === "0") {
+    // Log response details for debugging
+    const contentType = res.headers.get("content-type") || "";
+    const contentLength = res.headers.get("content-length");
+
+    if (res.status === 204) {
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
