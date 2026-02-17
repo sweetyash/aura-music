@@ -19,18 +19,15 @@ export interface Track {
 }
 
 export const mockTracks: Track[] = [
-  { id: "1", title: "Nee Kannu Neeli Samudram", artist: "Anup Rubens", album: "Uppena", cover: album1, duration: "4:24", liked: true, language: "Telugu", year: 2021, popularity: 92, releaseDate: "Feb 12, 2021", spotifyUri: "spotify:track:4P9Q0GojKVXpRTJCaL3kyy" },
-  { id: "2", title: "Midnight Run", artist: "DVLM", album: "After Dark", cover: album2, duration: "4:01", language: "English", year: 2024, popularity: 78, releaseDate: "Jan 5, 2024", spotifyUri: "spotify:track:2374M0fQpWi3dLnB54qaLX" },
-  { id: "3", title: "Ranjithame", artist: "Anirudh", album: "Vikram", cover: album3, duration: "3:45", liked: true, language: "Tamil", year: 2022, popularity: 95, releaseDate: "Jun 3, 2022", spotifyUri: "spotify:track:4MnMKli0x5lSH5jPGaOBCK" },
-  { id: "4", title: "Cloud Nine", artist: "Luna", album: "Ethereal", cover: album4, duration: "2:58", language: "English", year: 2025, popularity: 64, releaseDate: "Mar 18, 2025", spotifyUri: "spotify:track:3AJwUDP919kvQ9QcozQPxg" },
-  { id: "5", title: "Samajavaragamana", artist: "Sid Sriram", album: "Ala Vaikunthapurramuloo", cover: album1, duration: "5:33", language: "Telugu", year: 2020, popularity: 97, releaseDate: "Jan 12, 2020", spotifyUri: "spotify:track:3424sA2hzTCGNYCYbhvjJj" },
-  { id: "6", title: "Arabic Kuthu", artist: "Anirudh", album: "Beast", cover: album2, duration: "4:12", liked: true, language: "Tamil", year: 2022, popularity: 88, releaseDate: "Apr 13, 2022", spotifyUri: "spotify:track:3nCsGv8hBBY5DcwnMfzCJh" },
-  { id: "7", title: "Spectrum", artist: "Pixel Ghost", album: "Cyberspace", cover: album3, duration: "3:18", language: "English", year: 2024, popularity: 55, releaseDate: "Nov 20, 2024", spotifyUri: "spotify:track:3AhXZa8sUQht0UEdBJgpGc" },
-  { id: "8", title: "Inkem Inkem", artist: "Sid Sriram", album: "Geetha Govindam", cover: album4, duration: "5:02", language: "Telugu", year: 2018, popularity: 99, releaseDate: "Aug 15, 2018", spotifyUri: "spotify:track:6rypxtQk7CWJqZVbWrhhai" },
-  { id: "9", title: "Butta Bomma", artist: "Armaan Malik", album: "Ala Vaikunthapurramuloo", cover: album1, duration: "3:47", language: "Telugu", year: 2020, popularity: 94, releaseDate: "Jan 12, 2020", spotifyUri: "spotify:track:3Wo0KXn4Lzaa1FgjEEpbqp" },
-  { id: "10", title: "Kaavaalaa", artist: "Anirudh", album: "Jailer", cover: album3, duration: "3:55", liked: true, language: "Tamil", year: 2023, popularity: 91, releaseDate: "Jun 28, 2023", spotifyUri: "spotify:track:3DzDa3FCskaYkBOI6gdqt0" },
-  { id: "11", title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", cover: album2, duration: "3:20", language: "English", year: 2020, popularity: 98, releaseDate: "Nov 29, 2020", spotifyUri: "spotify:track:0VjIjW4GlUZAMYd2vXMi3b" },
-  { id: "12", title: "Oo Antava", artist: "Indravathi Chauhan", album: "Pushpa", cover: album4, duration: "3:10", language: "Telugu", year: 2021, popularity: 90, releaseDate: "Dec 17, 2021", spotifyUri: "spotify:track:5CPSJCRYz8MKTVmxlOPvZ4" },
+  { id: "1", title: "Nee Kannu Neeli Samudram", artist: "Javed Ali", album: "Uppena", cover: album1, duration: "5:12", liked: true, language: "Telugu", year: 2020, popularity: 92, releaseDate: "Feb 12, 2021", spotifyUri: "spotify:track:1C9SYGI40nNYh98gN87Fwr" },
+  { id: "2", title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", cover: album2, duration: "3:20", language: "English", year: 2020, popularity: 98, releaseDate: "Nov 29, 2020", spotifyUri: "spotify:track:0VjIjW4GlUZAMYd2vXMi3b" },
+  { id: "3", title: "Ranjithame", artist: "Thalapathy Vijay", album: "Varisu", cover: album3, duration: "4:47", liked: true, language: "Tamil", year: 2022, popularity: 95, releaseDate: "Dec 24, 2022", spotifyUri: "spotify:track:1LbBOhicFmu7ktJqIHCELt" },
+  { id: "4", title: "Samajavaragamana", artist: "Sid Sriram", album: "Ala Vaikunthapurramuloo", cover: album4, duration: "3:39", language: "Telugu", year: 2019, popularity: 97, releaseDate: "Sep 27, 2019", spotifyUri: "spotify:track:6AxlEmGxNoY8kjtTBLuUNZ" },
+  { id: "5", title: "Arabic Kuthu", artist: "Anirudh Ravichander", album: "Beast", cover: album1, duration: "4:39", liked: true, language: "Tamil", year: 2022, popularity: 88, releaseDate: "Feb 14, 2022", spotifyUri: "spotify:track:6yvxu91deFKt3X1QoV6qMv" },
+  { id: "6", title: "Inkem Inkem Inkem Kaavaale", artist: "Sid Sriram", album: "Geetha Govindam", cover: album2, duration: "4:26", language: "Telugu", year: 2018, popularity: 99, releaseDate: "Jul 10, 2018", spotifyUri: "spotify:track:3hglFJgXWPZUlHfiDO35b" },
+  { id: "7", title: "Butta Bomma", artist: "Armaan Malik", album: "Ala Vaikunthapurramuloo", cover: album3, duration: "3:18", language: "Telugu", year: 2020, popularity: 94, releaseDate: "Jan 12, 2020", spotifyUri: "spotify:track:0dnDTvdUco2UbaBjUtPxNS" },
+  { id: "8", title: "Kaavaalaa", artist: "Anirudh Ravichander", album: "Jailer", cover: album4, duration: "3:10", liked: true, language: "Tamil", year: 2023, popularity: 91, releaseDate: "Jun 28, 2023", spotifyUri: "spotify:track:3M9G4jJAgDLB9ycinua8Wo" },
+  { id: "9", title: "Oo Antava", artist: "Indravathi Chauhan", album: "Pushpa", cover: album1, duration: "3:43", language: "Telugu", year: 2021, popularity: 90, releaseDate: "Dec 10, 2021", spotifyUri: "spotify:track:3szxldqiYs7nkvtmooRod8" },
 ];
 
 export const trendingTracks = mockTracks.sort((a, b) => b.popularity - a.popularity);
