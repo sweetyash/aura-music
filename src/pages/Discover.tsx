@@ -73,8 +73,8 @@ const Discover = () => {
     try {
       // Get user's top tracks and artists for seeds
       const [topTracksRes, topArtistsRes] = await Promise.all([
-        getTopTracks("short_term", 5).catch(() => ({ items: [] })),
-        getTopArtists("short_term", 5).catch(() => ({ items: [] })),
+        getTopTracks("short_term", 20).catch(() => ({ items: [] })),
+        getTopArtists("short_term", 10).catch(() => ({ items: [] })),
       ]);
 
       const topTracks: SpotifyTrack[] = topTracksRes?.items || [];
@@ -84,7 +84,7 @@ const Discover = () => {
       const seedArtistIds = topArtists.slice(0, 2).map((a: any) => a.id);
 
       // Try recommendations first
-      const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 30).catch(() => ({ tracks: [] }));
+      const recsRes = await getRecommendations(seedTrackIds, seedArtistIds, 50).catch(() => ({ tracks: [] }));
       const recTracks: SpotifyTrack[] = recsRes?.tracks || [];
 
       if (recTracks.length > 0) {
@@ -95,10 +95,10 @@ const Discover = () => {
         setCards(topTracks.map(trackToCard));
       } else {
         // Fallback: search for popular tracks across multiple queries
-        const queries = ["top hits 2025", "trending music", "popular songs", "new music friday", "viral hits", "bollywood hits"];
-        const picked = queries.sort(() => Math.random() - 0.5).slice(0, 2);
+        const queries = ["top hits 2025", "trending music", "popular songs", "new music friday", "viral hits", "bollywood hits", "global top 50", "chart toppers", "best new music", "hot right now"];
+        const picked = queries.sort(() => Math.random() - 0.5).slice(0, 5);
         const results = await Promise.all(
-          picked.map((q) => search(q, "track", 10).catch(() => ({ tracks: { items: [] } })))
+          picked.map((q) => search(q, "track", 20).catch(() => ({ tracks: { items: [] } })))
         );
 
         const allTracks: SpotifyTrack[] = results

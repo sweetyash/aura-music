@@ -92,6 +92,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const deviceIdRef = useRef<string | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenRef = useRef<string | null>(token);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Keep tokenRef in sync
   useEffect(() => { tokenRef.current = token; }, [token]);
@@ -119,6 +120,14 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const stopAudioPreview = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+  }, []);
+
   const startProgressTracking = useCallback(() => {
     stopProgressTracking();
     progressInterval.current = setInterval(async () => {
@@ -135,6 +144,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const clearState = useCallback(() => {
     stopProgressTracking();
+    stopAudioPreview();
     if (playerRef.current) {
       playerRef.current.disconnect();
       playerRef.current = null;
@@ -149,7 +159,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setDuration(0);
     tokenExpiresAt.current = 0;
     localStorage.removeItem(STORAGE_KEY_EXPIRES);
-  }, [setToken, stopProgressTracking]);
+  }, [setToken, stopProgressTracking, stopAudioPreview]);
 
   // Initialize Web Playback SDK
   const initPlayer = useCallback((accessToken: string) => {
@@ -330,17 +340,63 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    // Fallback: open in Spotify
+    // Fallback: use HTML5 Audio with preview URL
+    if (previewUrl) {
+      stopAudioPreview();
+      const audio = new Audio(previewUrl);
+      audioRef.current = audio;
+      
+      audio.addEventListener("timeupdate", () => {
+        setProgress(audio.currentTime);
+        setDuration(audio.duration || 30);
+      });
+      audio.addEventListener("ended", () => {
+        setIsPlaying(false);
+        setProgress(0);
+      });
+      audio.addEventListener("error", () => {
+        log("audio_preview_error", { trackId });
+        toast({ title: "Preview unavailable", description: "Opening in Spotify...", variant: "destructive" });
+        window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
+      });
+
+      audio.play().then(() => {
+        setIsPlaying(true);
+        setDuration(audio.duration || 30);
+      }).catch(() => {
+        window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
+      });
+      return;
+    }
+
+    // Last fallback: open in Spotify
+    toast({ title: "Premium Required", description: "Full playback requires Spotify Premium. Opening track in Spotify.", variant: "destructive" });
     window.open(`https://open.spotify.com/track/${trackId}`, "_blank");
-  }, [startProgressTracking]);
+  }, [startProgressTracking, stopAudioPreview]);
 
   const togglePlayback = useCallback(async () => {
+    // Handle HTML5 Audio preview
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } else {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+      return;
+    }
     if (playerRef.current) {
       await playerRef.current.togglePlay();
     }
   }, []);
 
   const seek = useCallback(async (time: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setProgress(time);
+      return;
+    }
     if (playerRef.current) {
       await playerRef.current.seek(time * 1000);
       setProgress(time);
@@ -363,11 +419,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     return () => {
       stopProgressTracking();
+      stopAudioPreview();
       if (playerRef.current) {
         playerRef.current.disconnect();
       }
     };
-  }, [stopProgressTracking]);
+  }, [stopProgressTracking, stopAudioPreview]);
 
   return (
     <SpotifyContext.Provider
