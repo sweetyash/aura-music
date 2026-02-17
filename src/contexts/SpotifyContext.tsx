@@ -393,8 +393,19 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
     if (res.status === 404) {
       log("play_404_device_lost", { deviceId });
-      toast({ title: "Device Not Found", description: "The player device was lost. Reconnecting…", variant: "destructive" });
+      // Silently reconnect and retry once
       playerRef.current?.connect();
+      // Wait for reconnection then retry
+      await new Promise((r) => setTimeout(r, 2000));
+      if (deviceId) {
+        const retryRes = await spotifyPlayRequest(currentToken, deviceId, uri);
+        if (retryRes.ok) {
+          log("play_retry_success", { uri, title });
+          setNowPlaying({ trackUri: uri, title, artist, cover });
+          return;
+        }
+      }
+      toast({ title: "Player Reconnecting", description: "Please try again in a moment.", variant: "destructive" });
       return;
     }
     if (!res.ok) {
