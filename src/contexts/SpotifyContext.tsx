@@ -438,16 +438,20 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     const urlResult = extractSpotifyTokenFromUrl();
 
     if (urlResult) {
-      // Fresh token from OAuth callback
+      // Fresh token from OAuth callback — apply immediately, trust it
+      const expiry = Date.now() + (urlResult.expiresIn || 3600) * 1000;
       setToken(urlResult.token);
-      setTokenExpiry(Date.now() + (urlResult.expiresIn || 3600) * 1000);
+      setTokenExpiry(expiry);
       if (urlResult.refreshToken) {
         localStorage.setItem("spotify_refresh_token", urlResult.refreshToken);
       }
+      // Validate in background — but NEVER wipe a brand-new token on network failure
       validateToken(urlResult.token).then(({ valid, premium }) => {
-        if (!valid) { clearState(); return; }
-        setIsPremium(premium);
-        if (premium) initPlayer(urlResult.token);
+        if (valid) {
+          setIsPremium(premium);
+          if (premium) initPlayer(urlResult.token);
+        }
+        // If validation fails (network issue), keep the token — it's fresh from OAuth
       });
       return;
     }
@@ -463,10 +467,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Token not expired — validate it
+    // Token not expired — validate it; try silent refresh before clearing
     validateToken(token).then(({ valid, premium }) => {
       if (!valid) {
-        // Try silent refresh before giving up
         silentRefresh();
         return;
       }
