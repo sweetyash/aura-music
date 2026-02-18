@@ -183,7 +183,14 @@ const Discover = () => {
   const playTrackWithQueueRef = useRef(playTrackWithQueue);
   useEffect(() => { playTrackWithQueueRef.current = playTrackWithQueue; }, [playTrackWithQueue]);
 
-  const autoPlayCard = useCallback((swipedIndex: number, allCards: DiscoverCard[]) => {
+  const cardsRef = useRef<DiscoverCard[]>([]);
+  useEffect(() => { cardsRef.current = cards; }, [cards]);
+
+  const currentIndexRef = useRef(currentIndex);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+
+  const autoPlayCard = useCallback((swipedIndex: number) => {
+    const allCards = cardsRef.current;
     const nextIdx = swipedIndex + 1;
     if (nextIdx >= allCards.length) return;
     const remaining = allCards.slice(nextIdx);
@@ -196,9 +203,6 @@ const Discover = () => {
 
   const autoPlayCardRef = useRef(autoPlayCard);
   useEffect(() => { autoPlayCardRef.current = autoPlayCard; }, [autoPlayCard]);
-
-  const cardsRef = useRef<DiscoverCard[]>([]);
-  useEffect(() => { cardsRef.current = cards; }, [cards]);
 
   // Stable refs for gesture handlers — avoids re-adding touch listeners on every render
   const doLikeRef = useRef(doLike);
@@ -237,14 +241,13 @@ const Discover = () => {
       const currentOffset = offsetRef.current;
       if (Math.abs(currentOffset.x) > SWIPE_THRESHOLD) {
         const dir = currentOffset.x > 0 ? "right" : "left";
+        const swipedAt = currentIndexRef.current;
         setExitDir(dir);
         const currentCard = cardDataRef.current;
         if (dir === "right" && currentCard) doLikeRef.current(currentCard);
-        setCurrentIndex((i) => {
-          const nextI = i + 1;
-          setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
-          return nextI;
-        });
+        setCurrentIndex(swipedAt + 1);
+        currentIndexRef.current = swipedAt + 1;
+        setTimeout(() => autoPlayCardRef.current(swipedAt), 50);
         setTimeout(() => {
           setOffset({ x: 0, y: 0 });
           offsetRef.current = { x: 0, y: 0 };
@@ -271,14 +274,13 @@ const Discover = () => {
 
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) doLike(card);
+    const swipedAt = currentIndexRef.current;
     setExitDir(dir);
     setOffset({ x: dir === "right" ? 300 : -300, y: 0 });
     offsetRef.current = { x: dir === "right" ? 300 : -300, y: 0 };
-    setCurrentIndex((i) => {
-      const nextI = i + 1;
-      setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
-      return nextI;
-    });
+    setCurrentIndex(swipedAt + 1);
+    currentIndexRef.current = swipedAt + 1;
+    setTimeout(() => autoPlayCardRef.current(swipedAt), 50);
     setTimeout(() => {
       setOffset({ x: 0, y: 0 });
       offsetRef.current = { x: 0, y: 0 };
@@ -404,13 +406,12 @@ const Discover = () => {
                     const cur = offsetRef.current;
                     if (Math.abs(cur.x) > SWIPE_THRESHOLD) {
                       const dir = cur.x > 0 ? "right" : "left";
+                      const swipedAt = currentIndexRef.current;
                       setExitDir(dir);
                       if (dir === "right" && cardDataRef.current) doLikeRef.current(cardDataRef.current);
-                      setCurrentIndex((i) => {
-                        const nextI = i + 1;
-                        setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
-                        return nextI;
-                      });
+                      setCurrentIndex(swipedAt + 1);
+                      currentIndexRef.current = swipedAt + 1;
+                      setTimeout(() => autoPlayCardRef.current(swipedAt), 50);
                       setTimeout(() => { setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; setExitDir(null); }, 350);
                     } else { setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; }
                   }}
