@@ -491,39 +491,57 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, clearState, setToken, setTokenExpiry]);
 
-  // Poll localStorage for token after popup-based OAuth completes
+  // Listen for token written to localStorage by the OAuth callback tab
   const connect = useCallback(async () => {
     await loginWithSpotify();
 
-    // Poll every 500ms for up to 5 minutes for the token to appear in localStorage
-    // (set by extractSpotifyTokenFromUrl when the callback tab writes it)
+    // The browser fires a "storage" event in OTHER tabs/windows when localStorage changes.
+    // This is the native, reliable mechanism for cross-tab communication.
+    const applyToken = (accessToken: string) => {
+      const expiry = Number(localStorage.getItem("spotify_token_expires") || "0");
+      setToken(accessToken);
+      setTokenExpiry(expiry || Date.now() + 3600 * 1000);
+      // Apply token to state immediately — don't block on validation
+      setIsPremium(null);
+      toast({ title: "Spotify Connected!", description: "Welcome back 🎵" });
+      // Validate & init player in background
+      validateToken(accessToken).then(({ valid, premium }) => {
+        if (valid) {
+          setIsPremium(premium);
+          if (premium) initPlayer(accessToken);
+        }
+      });
+    };
+
+    // 1. Storage event: fires when another tab writes to localStorage
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "spotify_access_token" && e.newValue) {
+        cleanup();
+        applyToken(e.newValue);
+      }
+    };
+
+    // 2. Polling fallback: catches same-tab writes (popup blocked → direct navigation)
     const pollStart = Date.now();
     const poll = setInterval(() => {
       const storedToken = localStorage.getItem("spotify_access_token");
       const storedExpiry = Number(localStorage.getItem("spotify_token_expires") || "0");
-
       if (storedToken && storedExpiry > Date.now()) {
-        clearInterval(poll);
-        setToken(storedToken);
-        setTokenExpiry(storedExpiry);
-        const storedRefresh = localStorage.getItem("spotify_refresh_token");
-        if (storedRefresh) {
-          // token is already in localStorage from callback
-        }
-        validateToken(storedToken).then(({ valid, premium }) => {
-          if (!valid) { clearState(); return; }
-          setIsPremium(premium);
-          if (premium) initPlayer(storedToken);
-          toast({ title: "Spotify Connected!", description: "Welcome back 🎵" });
-        });
+        cleanup();
+        applyToken(storedToken);
       }
-
-      // Give up after 5 minutes
-      if (Date.now() - pollStart > 5 * 60 * 1000) {
-        clearInterval(poll);
-      }
+      if (Date.now() - pollStart > 5 * 60 * 1000) cleanup();
     }, 500);
-  }, [clearState, initPlayer, setToken, setTokenExpiry]);
+
+    const cleanup = () => {
+      window.removeEventListener("storage", handleStorage);
+      clearInterval(poll);
+    };
+
+    window.addEventListener("storage", handleStorage);
+    // Auto-cleanup after 5 min if user abandons the flow
+    setTimeout(cleanup, 5 * 60 * 1000);
+  }, [initPlayer, setToken, setTokenExpiry]);
 
   const refresh = useCallback(async () => {
     const fresh = await ensureToken();
