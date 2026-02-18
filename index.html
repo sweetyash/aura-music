@@ -43,8 +43,18 @@
 
   <body>
     <div id="root"></div>
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <!-- Stub so SDK doesn't throw if it fires before React mounts -->
+    <script>
+      window.onSpotifyWebPlaybackSDKReady = function() {
+        window.__spotifySDKReady = true;
+        if (window.__onSpotifySDKReadyCallback) {
+          window.__onSpotifySDKReadyCallback();
+        }
+      };
+    </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
   </body>
 </html>
+
 

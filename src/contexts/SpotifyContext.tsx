@@ -338,6 +338,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
+
       const player = new window.Spotify.Player({
         name: "Aura Music Player",
         getOAuthToken: (cb) => {
@@ -406,10 +407,10 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       playerRef.current = player;
     };
 
-    if (window.Spotify) {
+    if (window.Spotify || (window as any).__spotifySDKReady) {
       initSDK();
     } else {
-      window.onSpotifyWebPlaybackSDKReady = initSDK;
+      (window as any).__onSpotifySDKReadyCallback = initSDK;
     }
   }, [startProgressTracking, stopProgressTracking]);
 
