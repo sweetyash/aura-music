@@ -166,14 +166,11 @@ const Discover = () => {
   const doLikeRef = useRef(doLike);
   useEffect(() => { doLikeRef.current = doLike; }, [doLike]);
 
-  // Attach touch listeners when the card element is available.
-  // We use `card` as a dep so the effect re-runs after data loads (cardRef.current
-  // is null on first mount while loading). A flag prevents duplicate attachment.
-  const listenersAttached = useRef(false);
+  // Attach touch listeners whenever the card changes (new card in DOM).
+  // Using currentIndex ensures listeners are re-attached for each new card.
   useEffect(() => {
     const el = cardRef.current;
-    if (!el || listenersAttached.current) return;
-    listenersAttached.current = true;
+    if (!el) return;
 
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
@@ -222,14 +219,13 @@ const Discover = () => {
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
-      listenersAttached.current = false;
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  // Re-run when card becomes available (cardRef is null during loading)
+  // Re-run whenever the current card index changes so each card gets fresh listeners
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card]);
+  }, [currentIndex, card]);
 
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) doLike(card);
