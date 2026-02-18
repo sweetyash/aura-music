@@ -415,13 +415,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
-    const urlToken = extractSpotifyTokenFromUrl();
-    const activeToken = urlToken || token;
+    const urlResult = extractSpotifyTokenFromUrl();
+    const activeToken = urlResult ? urlResult.token : token;
     if (!activeToken) return;
 
-    if (urlToken) {
-      setToken(urlToken);
-      setTokenExpiry(Date.now() + 3600 * 1000);
+    if (urlResult) {
+      setToken(urlResult.token);
+      setTokenExpiry(Date.now() + (urlResult.expiresIn || 3600) * 1000);
     }
 
     validateToken(activeToken).then(({ valid, premium }) => {
@@ -439,13 +439,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const ensureToken = useCallback(async (): Promise<string | null> => {
     if (token && tokenExpiresAt.current > Date.now() + 60_000) return token;
     try {
-      const freshToken = await refreshSpotifyToken();
-      const { valid, premium } = await validateToken(freshToken);
+      const { accessToken, refreshToken } = await refreshSpotifyToken();
+      const { valid, premium } = await validateToken(accessToken);
       if (!valid) { clearState(); return null; }
-      setToken(freshToken);
+      setToken(accessToken);
       setIsPremium(premium);
       setTokenExpiry(Date.now() + 3600 * 1000);
-      return freshToken;
+      return accessToken;
     } catch {
       clearState();
       return null;
