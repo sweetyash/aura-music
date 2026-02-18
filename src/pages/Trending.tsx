@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Flame, Play, Loader2, Music2, ChevronRight } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, SpotifyPlaylist, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
+import { toast } from "@/hooks/use-toast";
 
 const timeRanges = [
   { value: "short_term", label: "Last 4 weeks" },
@@ -30,7 +31,7 @@ interface LangPlaylist {
 
 const Trending = () => {
   const { isConnected, playTrackWithQueue, playTrack, connect } = useSpotify();
-  const { getTopTracks, search, getPlaylistTracks } = useSpotifyApi();
+  const { getTopTracks, search } = useSpotifyApi();
 
   const [tracks, setTracks] = useState<SpotifyTrack[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +49,8 @@ const Trending = () => {
   useEffect(() => {
     if (!isConnected) return;
     setLoading(true);
-    getTopTracks(timeRange, 50)
+    // Use a conservative limit to avoid hitting new Spotify caps
+    getTopTracks(timeRange, 20)
       .then((data) => setTracks(data.items || []))
       .catch((err) => console.error("Top tracks error:", err))
       .finally(() => setLoading(false));
@@ -67,6 +69,11 @@ const Trending = () => {
       setLangPlaylists(res?.playlists?.items?.filter(Boolean) || []);
     } catch (err) {
       console.error("Lang playlist fetch error:", err);
+      toast({
+        title: "Spotify error",
+        description: "Could not load playlists right now. Spotify might be limiting requests.",
+        variant: "destructive",
+      });
       setLangPlaylists([]);
     } finally {
       setLangLoading(false);
@@ -77,19 +84,25 @@ const Trending = () => {
     fetchLangPlaylists(activeLang);
   }, [activeLang, fetchLangPlaylists]);
 
-  // Open a playlist and load its tracks
+  // Open a playlist and load its tracks (approximate via search to avoid 403 on playlist-tracks)
   const openPlaylist = async (pl: LangPlaylist) => {
     setSelectedPlaylist(pl);
     setPlaylistLoading(true);
     try {
-      const res = await getPlaylistTracks(pl.id, 50);
-      const items: SpotifyTrack[] = (res?.items || [])
-        .map((i: any) => i?.track)
-        .filter((t: any) => t && t.id);
+      const searchRes = await search(pl.name, "track", 40);
+      const items: SpotifyTrack[] = (searchRes?.tracks?.items || []).filter(
+        (t: any) => t && t.id
+      );
       setPlaylistTracks(items);
     } catch (err) {
-      console.error("Playlist tracks error:", err);
+      console.error("Playlist tracks error (search-based):", err);
       setPlaylistTracks([]);
+      toast({
+        title: "Spotify error",
+        description:
+          "Could not load tracks for this playlist. Spotify might be limiting requests.",
+        variant: "destructive",
+      });
     } finally {
       setPlaylistLoading(false);
     }
@@ -214,26 +227,32 @@ const Trending = () => {
               </div>
             ) : (
               <div className="flex flex-col gap-1 max-h-72 overflow-y-auto">
-                {playlistTracks.map((track, i) => (
-                  <div
-                    key={`${track.id}-${i}`}
-                    onClick={() => handlePlayPlaylistTrack(track, i)}
-                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-secondary/60 transition-colors group cursor-pointer"
-                  >
-                    <span className="text-xs font-bold text-muted-foreground w-4 text-right tabular-nums">{i + 1}</span>
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
-                      <img src={getTrackCover(track)} alt={track.album.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Play size={12} className="text-foreground" fill="currentColor" />
+                {playlistTracks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4">
+                    No tracks could be loaded for this playlist. Spotify might be temporarily limiting requests.
+                  </p>
+                ) : (
+                  playlistTracks.map((track, i) => (
+                    <div
+                      key={`${track.id}-${i}`}
+                      onClick={() => handlePlayPlaylistTrack(track, i)}
+                      className="flex items-center gap-3 p-2 rounded-xl hover:bg-secondary/60 transition-colors group cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-muted-foreground w-4 text-right tabular-nums">{i + 1}</span>
+                      <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={getTrackCover(track)} alt={track.album.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Play size={12} className="text-foreground" fill="currentColor" />
+                        </div>
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground truncate">{track.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{track.artists.map(a => a.name).join(", ")}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatDuration(track.duration_ms)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{track.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{track.artists.map(a => a.name).join(", ")}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatDuration(track.duration_ms)}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>

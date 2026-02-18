@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
-import { loginWithSpotify, refreshSpotifyToken, extractSpotifyTokenFromUrl } from "@/lib/spotify-auth";
+import { loginWithSpotify, refreshSpotifyToken, extractSpotifyAuthFromUrl } from "@/lib/spotify-auth";
 import { toast } from "@/hooks/use-toast";
 
 interface NowPlaying {
@@ -84,6 +84,12 @@ async function validateToken(accessToken: string): Promise<{ valid: boolean; pre
     const res = await fetch("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    // If Spotify is rate limiting us, don't treat the token as invalid –
+    // just skip updating premium status for now.
+    if (res.status === 429) {
+      console.warn("[Spotify] Rate limited while validating token");
+      return { valid: true, premium: false };
+    }
     if (!res.ok) return { valid: false, premium: false };
     const data = await res.json();
     return { valid: true, premium: data.product === "premium" };
@@ -94,6 +100,7 @@ async function validateToken(accessToken: string): Promise<{ valid: boolean; pre
 
 const STORAGE_KEY_TOKEN = "spotify_access_token";
 const STORAGE_KEY_EXPIRES = "spotify_token_expires";
+const STORAGE_KEY_REFRESH = "spotify_refresh_token";
 
 export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [token, setTokenState] = useState<string | null>(() => {
@@ -120,6 +127,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const deviceIdRef = useRef<string | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenRef = useRef<string | null>(token);
+  const refreshTokenRef = useRef<string | null>(localStorage.getItem(STORAGE_KEY_REFRESH));
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<QueueTrack[]>([]);
   const queueIndexRef = useRef<number>(-1);
@@ -149,6 +157,15 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const setTokenExpiry = useCallback((exp: number) => {
     tokenExpiresAt.current = exp;
     localStorage.setItem(STORAGE_KEY_EXPIRES, String(exp));
+  }, []);
+
+  const setRefreshToken = useCallback((refresh: string | null) => {
+    refreshTokenRef.current = refresh;
+    if (refresh) {
+      localStorage.setItem(STORAGE_KEY_REFRESH, refresh);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_REFRESH);
+    }
   }, []);
 
   const stopProgressTracking = useCallback(() => {
@@ -203,7 +220,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setQueueIndex(-1);
     tokenExpiresAt.current = 0;
     localStorage.removeItem(STORAGE_KEY_EXPIRES);
-  }, [setToken, stopProgressTracking, stopAudioPreview]);
+    setRefreshToken(null);
+  }, [setToken, stopProgressTracking, stopAudioPreview, setRefreshToken]);
 
   // Stable ref for internal play so the `ended` handler always has a fresh reference
   const playTrackInternalRef = useRef<(
@@ -415,14 +433,18 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
-    const urlToken = extractSpotifyTokenFromUrl();
-    const activeToken = urlToken || token;
-    if (!activeToken) return;
-
-    if (urlToken) {
-      setToken(urlToken);
-      setTokenExpiry(Date.now() + 3600 * 1000);
+    const urlAuth = extractSpotifyAuthFromUrl();
+    const activeToken = urlAuth?.accessToken || token;
+    if (urlAuth?.accessToken) {
+      setToken(urlAuth.accessToken);
+      const expiresMs = (urlAuth.expiresIn ?? 3600) * 1000;
+      setTokenExpiry(Date.now() + expiresMs);
+      if (urlAuth.refreshToken) {
+        setRefreshToken(urlAuth.refreshToken);
+      }
     }
+
+    if (!activeToken) return;
 
     validateToken(activeToken).then(({ valid, premium }) => {
       if (!valid) {
@@ -437,20 +459,36 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ensureToken = useCallback(async (): Promise<string | null> => {
-    if (token && tokenExpiresAt.current > Date.now() + 60_000) return token;
+    const currentToken = tokenRef.current;
+    const currentRefresh = refreshTokenRef.current;
+
+    if (currentToken && tokenExpiresAt.current > Date.now() + 60_000) {
+      return currentToken;
+    }
+
+    if (!currentRefresh) {
+      clearState();
+      return null;
+    }
+
     try {
-      const freshToken = await refreshSpotifyToken();
-      const { valid, premium } = await validateToken(freshToken);
-      if (!valid) { clearState(); return null; }
-      setToken(freshToken);
+      const refreshed = await refreshSpotifyToken(currentRefresh);
+      const { valid, premium } = await validateToken(refreshed.accessToken);
+      if (!valid) {
+        clearState();
+        return null;
+      }
+      setToken(refreshed.accessToken);
+      setRefreshToken(refreshed.refreshToken);
       setIsPremium(premium);
-      setTokenExpiry(Date.now() + 3600 * 1000);
-      return freshToken;
+      const expiresMs = (refreshed.expiresIn ?? 3600) * 1000;
+      setTokenExpiry(Date.now() + expiresMs);
+      return refreshed.accessToken;
     } catch {
       clearState();
       return null;
     }
-  }, [token, clearState, setToken, setTokenExpiry]);
+  }, [clearState, setToken, setTokenExpiry, setRefreshToken]);
 
   const connect = useCallback(async () => { await loginWithSpotify(); }, []);
 

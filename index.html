@@ -43,6 +43,11 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Define a safe no-op handler so the Spotify SDK doesn't throw
+      // if it loads before our React app sets window.onSpotifyWebPlaybackSDKReady.
+      window.onSpotifyWebPlaybackSDKReady = window.onSpotifyWebPlaybackSDKReady || function () {};
+    </script>
     <script src="https://sdk.scdn.co/spotify-player.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

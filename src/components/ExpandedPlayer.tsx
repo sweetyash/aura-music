@@ -24,8 +24,23 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
   } = useSpotify();
   const [liked, setLiked] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isSeeking = useRef(false);
+
+  const handleCardMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    const rotateX = -y * 10; // stronger tilt up/down
+    const rotateY = x * 10;  // stronger tilt left/right
+    setTilt({ x: rotateX, y: rotateY });
+  }, []);
+
+  const handleCardMouseLeave = useCallback(() => {
+    setTilt({ x: 0, y: 0 });
+  }, []);
 
   const seekFromClientX = useCallback((clientX: number) => {
     if (!duration || !progressBarRef.current) return;
@@ -119,7 +134,19 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
       )}
 
       {/* Content */}
-      <div className="relative flex flex-col flex-1 px-6 pt-4 pb-8 max-w-lg mx-auto w-full z-10">
+      <div
+        className="relative flex flex-1 items-stretch px-4 pt-4 pb-6 max-w-lg mx-auto w-full z-10"
+        style={{ perspective: "1200px" }}
+      >
+        <div
+          className="glass-strong rounded-3xl border border-white/5 shadow-2xl animate-slide-up flex flex-col flex-1 px-5 pt-4 pb-6 transition-transform duration-200 will-change-transform"
+          onMouseMove={handleCardMouseMove}
+          onMouseLeave={handleCardMouseLeave}
+          style={{
+            transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+            transformStyle: "preserve-3d",
+          }}
+        >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-secondary/60 transition-colors">
@@ -210,7 +237,7 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           {/* Shuffle */}
           <button
             onClick={toggleShuffle}
@@ -255,6 +282,7 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
             <Repeat size={20} />
             {repeatOn && <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />}
           </button>
+        </div>
         </div>
       </div>
     </div>

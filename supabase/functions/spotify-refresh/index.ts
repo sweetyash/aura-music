@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -12,49 +10,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = claimsData.claims.sub;
-
-    // Get refresh token from DB using service role
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data: tokenRow, error: fetchError } = await supabaseAdmin
-      .from("spotify_tokens")
-      .select("refresh_token")
-      .eq("user_id", userId)
-      .single();
-
-    if (fetchError || !tokenRow) {
-      return new Response(JSON.stringify({ error: "No Spotify tokens found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Stateless refresh: use refresh_token passed from the client
+    const { refresh_token } = await req.json();
+    if (!refresh_token) {
+      return new Response(
+        JSON.stringify({ error: "Missing refresh_token" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Refresh with Spotify
@@ -69,7 +34,7 @@ Deno.serve(async (req) => {
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: tokenRow.refresh_token,
+        refresh_token,
       }),
     });
 
@@ -83,23 +48,17 @@ Deno.serve(async (req) => {
     }
 
     const { access_token, refresh_token: newRefresh, expires_in } = tokenData;
-    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    // Update tokens in DB
-    await supabaseAdmin
-      .from("spotify_tokens")
-      .update({
-        access_token,
-        refresh_token: newRefresh || tokenRow.refresh_token,
-        expires_at: expiresAt,
-      })
-      .eq("user_id", userId);
-
-    return new Response(JSON.stringify({ access_token, expires_in }), {
+    return new Response(JSON.stringify({
+      access_token,
+      refresh_token: newRefresh || refresh_token,
+      expires_in,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = (error as Error)?.message ?? "Unexpected error";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

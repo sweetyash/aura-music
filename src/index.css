@@ -59,8 +59,14 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
     font-family: 'DM Sans', sans-serif;
+    /* Subtle Apple-like layered gradient background */
+    background:
+      radial-gradient(circle at top left, hsl(141 73% 30% / 0.25), transparent 55%),
+      radial-gradient(circle at top right, hsl(260 100% 60% / 0.18), transparent 55%),
+      radial-gradient(circle at bottom, hsl(200 100% 60% / 0.12), transparent 60%),
+      hsl(var(--background));
   }
 }
 
@@ -86,8 +92,34 @@
   }
 
   .glass {
-    background: hsl(0 0% 12% / 0.8);
-    backdrop-filter: blur(20px);
+    /* Apple-style glassmorphism surface */
+    background:
+      linear-gradient(
+        135deg,
+        hsl(0 0% 16% / 0.92),
+        hsl(0 0% 10% / 0.86)
+      );
+    backdrop-filter: blur(26px) saturate(1.6);
+    -webkit-backdrop-filter: blur(26px) saturate(1.6);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+    box-shadow:
+      0 18px 45px hsl(0 0% 0% / 0.75),
+      0 0 0 1px hsl(0 0% 0% / 0.65);
+  }
+
+  .glass-strong {
+    background:
+      linear-gradient(
+        135deg,
+        hsl(0 0% 18% / 0.95),
+        hsl(0 0% 6% / 0.9)
+      );
+    backdrop-filter: blur(32px) saturate(1.8);
+    -webkit-backdrop-filter: blur(32px) saturate(1.8);
+    border: 1px solid hsl(0 0% 100% / 0.08);
+    box-shadow:
+      0 22px 55px hsl(0 0% 0% / 0.78),
+      0 0 0 1px hsl(0 0% 0% / 0.7);
   }
 
   .safe-bottom {

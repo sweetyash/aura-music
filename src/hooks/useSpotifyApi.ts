@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 
+// Simple client-side backoff so we don't keep hammering Spotify
+// when they respond with 429 (rate limiting).
+let spotifyRateLimitedUntil = 0;
+
 export interface SpotifyTrack {
   id: string;
   name: string;
@@ -57,9 +61,18 @@ export function formatDuration(ms: number): string {
 export function useSpotifyApi() {
   const { token } = useSpotify();
 
+  const clampLimit = (limit: number, max: number) =>
+    Math.max(1, Math.min(limit, max));
+
   const callApi = useCallback(
     async (endpoint: string, method = "GET", body?: any) => {
       if (!token) throw new Error("Not connected to Spotify");
+
+      // If we've recently been rate limited, short‑circuit before hitting the network again.
+      const now = Date.now();
+      if (spotifyRateLimitedUntil && now < spotifyRateLimitedUntil) {
+        throw new Error("Spotify is temporarily rate limiting requests. Please try again in a little while.");
+      }
 
       const url = endpoint.startsWith("http")
         ? endpoint
@@ -85,6 +98,14 @@ export function useSpotifyApi() {
       let data: any;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
 
+      if (res.status === 429) {
+        // Respect Retry-After header when present; otherwise wait 30 seconds.
+        const retryAfterHeader = res.headers.get("Retry-After");
+        const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) || 30 : 30;
+        spotifyRateLimitedUntil = Date.now() + retryAfterSeconds * 1000;
+        throw new Error("Spotify is temporarily rate limiting requests. Please try again in a little while.");
+      }
+
       if (!res.ok) throw new Error(data?.error?.message || data?.error || `Spotify API error ${res.status}`);
       return data;
     },
@@ -100,30 +121,44 @@ export function useSpotifyApi() {
   );
 
   const getRecentlyPlayed = useCallback(
-    (limit = 20) => callApi(`/v1/me/player/recently-played?limit=${limit}`),
+    (limit = 20) =>
+      callApi(`/v1/me/player/recently-played?limit=${clampLimit(limit, 20)}`),
     [callApi]
   );
 
   const getTopTracks = useCallback(
     (timeRange = "medium_term", limit = 20) =>
-      callApi(`/v1/me/top/tracks?time_range=${timeRange}&limit=${limit}`),
+      callApi(
+        `/v1/me/top/tracks?time_range=${timeRange}&limit=${clampLimit(
+          limit,
+          20
+        )}`
+      ),
     [callApi]
   );
 
   const getTopArtists = useCallback(
     (timeRange = "medium_term", limit = 20) =>
-      callApi(`/v1/me/top/artists?time_range=${timeRange}&limit=${limit}`),
+      callApi(
+        `/v1/me/top/artists?time_range=${timeRange}&limit=${clampLimit(
+          limit,
+          20
+        )}`
+      ),
     [callApi]
   );
 
   const getPlaylists = useCallback(
-    (limit = 50) => callApi(`/v1/me/playlists?limit=${limit}`),
+    (limit = 50) =>
+      callApi(`/v1/me/playlists?limit=${clampLimit(limit, 20)}`),
     [callApi]
   );
 
   const getPlaylistTracks = useCallback(
     (playlistId: string, limit = 100) =>
-      callApi(`/v1/playlists/${playlistId}/tracks?limit=${limit}`),
+      callApi(
+        `/v1/playlists/${playlistId}/tracks?limit=${clampLimit(limit, 20)}`
+      ),
     [callApi]
   );
 
@@ -145,7 +180,9 @@ export function useSpotifyApi() {
 
   const getSavedTracks = useCallback(
     (limit = 50, offset = 0) =>
-      callApi(`/v1/me/tracks?limit=${limit}&offset=${offset}`),
+      callApi(
+        `/v1/me/tracks?limit=${clampLimit(limit, 20)}&offset=${offset}`
+      ),
     [callApi]
   );
 

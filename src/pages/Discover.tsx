@@ -53,7 +53,17 @@ const PopularityBar = ({ value }: { value: number }) => (
 );
 
 const Discover = () => {
-  const { isConnected, isPlaying, nowPlaying, connect, playTrackWithQueue, togglePlayback } = useSpotify();
+  const {
+    isConnected,
+    isPlaying,
+    nowPlaying,
+    connect,
+    playTrackWithQueue,
+    togglePlayback,
+    progress,
+    duration,
+    seek,
+  } = useSpotify();
   const { getTopTracks, getRecentlyPlayed, saveTrack, search } = useSpotifyApi();
   const { likeTrack } = useDiscoverLikes();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
@@ -72,18 +82,32 @@ const Discover = () => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
   const saveErrorShown = useRef(false);
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
+  const isSeeking = useRef(false);
+
+  const seekFromClientX = useCallback(
+    (clientX: number, totalSeconds: number) => {
+      if (!totalSeconds || !progressBarRef.current) return;
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+      const percent = x / rect.width;
+      seek(percent * totalSeconds);
+    },
+    [seek]
+  );
 
   // Fetch personalized recommendations
   const fetchCards = useCallback(async () => {
     if (!isConnected) return;
     setLoading(true);
     try {
-      // Fetch user's top tracks (multiple time ranges) + recently played in parallel
+      // Fetch user's top tracks (multiple time ranges) + recently played in parallel.
+      // Use conservative limits to avoid hitting Spotify's per-endpoint caps.
       const [shortTracksRes, mediumTracksRes, longTracksRes, recentRes] = await Promise.all([
-        getTopTracks("short_term", 50).catch(() => ({ items: [] })),
-        getTopTracks("medium_term", 50).catch(() => ({ items: [] })),
-        getTopTracks("long_term", 50).catch(() => ({ items: [] })),
-        getRecentlyPlayed(50).catch(() => ({ items: [] })),
+        getTopTracks("short_term", 20).catch(() => ({ items: [] })),
+        getTopTracks("medium_term", 20).catch(() => ({ items: [] })),
+        getTopTracks("long_term", 20).catch(() => ({ items: [] })),
+        getRecentlyPlayed(20).catch(() => ({ items: [] })),
       ]);
 
       const shortTracks: SpotifyTrack[] = shortTracksRes?.items || [];
@@ -449,8 +473,60 @@ const Discover = () => {
                     <p className="text-2xl font-bold text-foreground leading-tight">{card.title}</p>
                     <p className="text-sm text-muted-foreground mt-1 mb-3">{card.artist} · {card.album}</p>
 
-                    {/* Popularity */}
-                    <PopularityBar value={card.popularity} />
+                    {/* In-card seek bar */}
+                    {(() => {
+                      const isCurrent = nowPlaying?.trackUri === card.uri;
+                      const totalSeconds =
+                        isCurrent && duration > 0
+                          ? duration
+                          : card.durationMs / 1000;
+                      const pct =
+                        isCurrent && totalSeconds > 0
+                          ? Math.min(100, (progress / totalSeconds) * 100)
+                          : 0;
+
+                      const handleClick = (e: any) => {
+                        e.stopPropagation();
+                        if (!isCurrent || !totalSeconds) return;
+                        seekFromClientX(e.clientX, totalSeconds);
+                      };
+
+                      const handleTouchStart = (e: any) => {
+                        if (!isCurrent || !totalSeconds) return;
+                        isSeeking.current = true;
+                        seekFromClientX(e.touches[0].clientX, totalSeconds);
+                      };
+
+                      const handleTouchMove = (e: any) => {
+                        if (!isSeeking.current || !isCurrent || !totalSeconds) return;
+                        e.preventDefault();
+                        seekFromClientX(e.touches[0].clientX, totalSeconds);
+                      };
+
+                      const handleTouchEnd = () => {
+                        isSeeking.current = false;
+                      };
+
+                      return (
+                        <div className="mt-3 mb-1">
+                          <div
+                            ref={progressBarRef}
+                            className={`h-1 rounded-full bg-secondary/70 overflow-hidden ${
+                              isCurrent && totalSeconds ? "cursor-pointer" : "cursor-default"
+                            }`}
+                            onClick={handleClick}
+                            onTouchStart={handleTouchStart}
+                            onTouchMove={handleTouchMove}
+                            onTouchEnd={handleTouchEnd}
+                          >
+                            <div
+                              className="h-full rounded-full bg-primary transition-all duration-150"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Play/Pause button + vinyl disc */}
                     {(() => {
