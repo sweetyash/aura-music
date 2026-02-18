@@ -59,7 +59,7 @@ const Playlists = () => {
       toast({ title: "✅ Playlist Created!", description: `"${newName.trim()}" is ready on Spotify.` });
     } catch (err: any) {
       console.error("Create playlist error:", err);
-      const isForbidden = err?.message?.toLowerCase().includes("forbidden") || err?.message?.includes("403");
+      const isForbidden = err?.message?.toLowerCase().includes("forbidden") || err?.message?.includes("403") || err?.message?.startsWith("403");
       if (isForbidden) {
         setPermissionError(true);
         setShowCreate(false);
