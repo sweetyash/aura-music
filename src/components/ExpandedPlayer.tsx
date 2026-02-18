@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { ChevronDown, Heart, ExternalLink, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, ListMusic } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import album1 from "@/assets/album-1.jpg";
@@ -24,6 +24,16 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
   } = useSpotify();
   const [liked, setLiked] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const isSeeking = useRef(false);
+
+  const seekFromClientX = useCallback((clientX: number) => {
+    if (!duration || !progressBarRef.current) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    const percent = x / rect.width;
+    seek(percent * duration);
+  }, [duration, seek]);
 
   if (!open) return null;
 
@@ -34,11 +44,22 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = x / rect.width;
-    seek(percent * duration);
+    seekFromClientX(e.clientX);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    isSeeking.current = true;
+    seekFromClientX(e.touches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isSeeking.current) return;
+    e.preventDefault();
+    seekFromClientX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    isSeeking.current = false;
   };
 
   return (
@@ -166,14 +187,20 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
         {/* Progress bar */}
         <div className="mb-5">
           <div
-            className="relative h-2 rounded-full bg-secondary/60 cursor-pointer group"
+            ref={progressBarRef}
+            className="relative h-5 flex items-center cursor-pointer group touch-none"
             onClick={handleSeek}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-200 relative"
-              style={{ width: `${progressPercent}%` }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-x-0 h-2 rounded-full bg-secondary/60 top-1/2 -translate-y-1/2">
+              <div
+                className="h-full rounded-full bg-primary relative"
+                style={{ width: `${progressPercent}%` }}
+              >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-md opacity-100 transition-opacity" />
+              </div>
             </div>
           </div>
           <div className="flex justify-between mt-1.5">
