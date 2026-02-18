@@ -416,23 +416,80 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
     const urlResult = extractSpotifyTokenFromUrl();
-    const activeToken = urlResult ? urlResult.token : token;
-    if (!activeToken) return;
 
     if (urlResult) {
+      // Fresh token from OAuth callback
       setToken(urlResult.token);
       setTokenExpiry(Date.now() + (urlResult.expiresIn || 3600) * 1000);
+      if (urlResult.refreshToken) {
+        localStorage.setItem("spotify_refresh_token", urlResult.refreshToken);
+      }
+      validateToken(urlResult.token).then(({ valid, premium }) => {
+        if (!valid) {
+          clearState();
+          return;
+        }
+        setIsPremium(premium);
+        if (premium) initPlayer(urlResult.token);
+      });
+      return;
     }
 
-    validateToken(activeToken).then(({ valid, premium }) => {
+    // No URL token — check if we have a stored token
+    if (!token) return;
+
+    const isExpired = tokenExpiresAt.current < Date.now() + 60_000;
+
+    if (isExpired) {
+      // Try to refresh silently before validating
+      const refreshToken = localStorage.getItem("spotify_refresh_token");
+      if (!refreshToken) {
+        // No refresh token either — clear silently (don't show error toast)
+        clearState();
+        return;
+      }
+      // Attempt silent refresh
+      import("@/lib/spotify-auth").then(({ refreshSpotifyToken }) =>
+        refreshSpotifyToken()
+          .then(({ accessToken }) => {
+            setToken(accessToken);
+            setTokenExpiry(Date.now() + 3600 * 1000);
+            return validateToken(accessToken);
+          })
+          .then(({ valid, premium }) => {
+            if (!valid) { clearState(); return; }
+            setIsPremium(premium);
+            if (premium) initPlayer(tokenRef.current!);
+          })
+          .catch(() => clearState())
+      );
+      return;
+    }
+
+    // Token still valid — just validate
+    validateToken(token).then(({ valid, premium }) => {
       if (!valid) {
-        toast({ title: "Spotify Connection Issue", description: "Try disconnecting and reconnecting from Profile.", variant: "destructive" });
+        // Try refresh before giving up
+        const refreshToken = localStorage.getItem("spotify_refresh_token");
+        if (!refreshToken) { clearState(); return; }
+        import("@/lib/spotify-auth").then(({ refreshSpotifyToken }) =>
+          refreshSpotifyToken()
+            .then(({ accessToken }) => {
+              setToken(accessToken);
+              setTokenExpiry(Date.now() + 3600 * 1000);
+              return validateToken(accessToken);
+            })
+            .then(({ valid: v2, premium: p2 }) => {
+              if (!v2) { clearState(); return; }
+              setIsPremium(p2);
+              if (p2) initPlayer(tokenRef.current!);
+            })
+            .catch(() => clearState())
+        );
         return;
       }
       setIsPremium(premium);
-      if (premium) {
-        initPlayer(activeToken);
-      }
+      if (premium) initPlayer(token);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
