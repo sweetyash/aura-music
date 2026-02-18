@@ -1,6 +1,24 @@
 import { useCallback } from "react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 
+// ─── Session-level cache (survives component remounts, resets on page refresh) ───
+const apiCache = new Map<string, { data: any; expiresAt: number }>();
+const CACHE_TTL_MS = 60_000; // 1 minute
+
+function getCached(key: string): any | null {
+  const entry = apiCache.get(key);
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  apiCache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: any) {
+  apiCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+// In-flight deduplication: prevent simultaneous identical GET requests
+const inFlight = new Map<string, Promise<any>>();
+
 export interface SpotifyTrack {
   id: string;
   name: string;
@@ -65,6 +83,44 @@ export function useSpotifyApi() {
         ? endpoint
         : `https://api.spotify.com${endpoint}`;
 
+      // Only cache GET requests
+      if (method === "GET") {
+        const cached = getCached(url);
+        if (cached) return cached;
+
+        // Deduplicate in-flight requests for same URL
+        if (inFlight.has(url)) return inFlight.get(url);
+
+        const promise = (async () => {
+          const res = await fetch(url, {
+            method,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (res.status === 204) return { success: true };
+
+          const text = await res.text();
+          let data: any;
+          try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+          if (!res.ok) {
+            inFlight.delete(url);
+            throw new Error(data?.error?.message || data?.error || `Spotify API error ${res.status}`);
+          }
+
+          setCache(url, data);
+          inFlight.delete(url);
+          return data;
+        })();
+
+        inFlight.set(url, promise);
+        return promise;
+      }
+
+      // Non-GET: no caching, just fetch
       const fetchOptions: RequestInit = {
         method,
         headers: {
@@ -72,13 +128,9 @@ export function useSpotifyApi() {
           "Content-Type": "application/json",
         },
       };
-
-      if (body && method !== "GET") {
-        fetchOptions.body = JSON.stringify(body);
-      }
+      if (body) fetchOptions.body = JSON.stringify(body);
 
       const res = await fetch(url, fetchOptions);
-
       if (res.status === 204) return { success: true };
 
       const text = await res.text();
