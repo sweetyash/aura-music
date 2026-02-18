@@ -38,14 +38,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate refresh token format (basic sanity check)
-    if (refresh_token.length > 512 || !/^[A-Za-z0-9_\-]+$/.test(refresh_token)) {
-      return new Response(JSON.stringify({ error: "Invalid refresh token format" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const clientId = Deno.env.get("SPOTIFY_CLIENT_ID")!;
     const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET")!;
 
