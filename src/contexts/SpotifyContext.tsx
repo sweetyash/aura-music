@@ -160,10 +160,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const stopAudioPreview = useCallback(() => {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current.onended = null;
-      audioRef.current = null;
+      const audio = audioRef.current;
+      audioRef.current = null; // Clear ref FIRST so ended handler won't auto-advance
+      audio.pause();
+      audio.removeEventListener("timeupdate", () => {});
+      audio.removeEventListener("ended", () => {});
+      audio.removeEventListener("error", () => {});
+      audio.src = "";
     }
   }, []);
 
@@ -264,21 +267,24 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       audio.preload = "auto";
       audioRef.current = audio;
 
-      audio.addEventListener("timeupdate", () => {
+      const handleTimeUpdate = () => {
+        if (audioRef.current !== audio) return;
         setProgress(audio.currentTime);
         progressRef.current = audio.currentTime;
         setDuration(audio.duration || 30);
-      });
+      };
 
-      audio.addEventListener("ended", () => {
+      const handleEnded = () => {
+        // Only auto-advance if this audio element is still the active one
+        if (audioRef.current !== audio) return;
         if (repeatRef.current) {
           audio.currentTime = 0;
           audio.play().catch(() => {});
         } else {
+          audioRef.current = null;
           setIsPlaying(false);
           setProgress(0);
           progressRef.current = 0;
-          // Auto-advance to next track using stable refs
           const nextIdx = queueIndexRef.current + 1;
           if (nextIdx < queueRef.current.length) {
             const next = queueRef.current[nextIdx];
@@ -289,14 +295,20 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
             }, 300);
           }
         }
-      });
+      };
 
-      audio.addEventListener("error", () => {
+      const handleError = () => {
+        if (audioRef.current !== audio) return;
         log("audio_preview_error", { trackId });
         toast({ title: "Preview unavailable", description: "This track cannot be played in-app.", variant: "destructive" });
-      });
+      };
+
+      audio.addEventListener("timeupdate", handleTimeUpdate);
+      audio.addEventListener("ended", handleEnded);
+      audio.addEventListener("error", handleError);
 
       audio.play().then(() => {
+        if (audioRef.current !== audio) return;
         setIsPlaying(true);
         setDuration(audio.duration || 30);
       }).catch(() => {
@@ -504,22 +516,29 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     const currentQueue = queueRef.current;
     const currentIdx = queueIndexRef.current;
 
-    // Queue-based navigation first (always works reliably)
+    // Queue-based navigation (always preferred)
     if (currentQueue.length > 0) {
       let nextIdx: number;
       if (shuffleRef.current) {
-        nextIdx = Math.floor(Math.random() * currentQueue.length);
+        // Pick random index that's not the current one
+        do { nextIdx = Math.floor(Math.random() * currentQueue.length); }
+        while (nextIdx === currentIdx && currentQueue.length > 1);
       } else {
         nextIdx = currentIdx + 1;
         if (nextIdx >= currentQueue.length) {
           if (repeatRef.current) nextIdx = 0;
-          else return;
+          else return; // End of queue, no repeat
         }
       }
-      setQueueIndex(nextIdx);
+      // Update refs synchronously before stopping audio
       queueIndexRef.current = nextIdx;
+      setQueueIndex(nextIdx);
       const next = currentQueue[nextIdx];
+      // Stop current audio (clears audioRef.current)
       stopAudioPreview();
+      setIsPlaying(false);
+      setProgress(0);
+      progressRef.current = 0;
       await playTrackInternalRef.current(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
       return;
     }
@@ -549,12 +568,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Queue-based navigation first (always works reliably)
+    // Queue-based navigation (always preferred)
     if (currentQueue.length > 0) {
       let prevIdx = currentIdx - 1;
       if (prevIdx < 0) {
-        if (repeatRef.current) prevIdx = currentQueue.length - 1;
-        else {
+        if (repeatRef.current) {
+          prevIdx = currentQueue.length - 1;
+        } else {
           // Restart current track from beginning
           if (audioRef.current) {
             audioRef.current.currentTime = 0;
@@ -568,10 +588,15 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
       }
-      setQueueIndex(prevIdx);
+      // Update refs synchronously before stopping audio
       queueIndexRef.current = prevIdx;
+      setQueueIndex(prevIdx);
       const prev = currentQueue[prevIdx];
+      // Stop current audio (clears audioRef.current)
       stopAudioPreview();
+      setIsPlaying(false);
+      setProgress(0);
+      progressRef.current = 0;
       await playTrackInternalRef.current(prev.uri, prev.title, prev.artist, prev.cover, prev.previewUrl, prev.durationMs);
       return;
     }
