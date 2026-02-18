@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { Heart, X, Play, Pause, Music, TrendingUp, Loader2, RefreshCw, Disc } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
+import { useDiscoverLikes } from "@/hooks/useDiscoverLikes";
 import GlobalSearch from "@/components/GlobalSearch";
 import { toast } from "@/hooks/use-toast";
 
@@ -54,6 +55,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 const Discover = () => {
   const { isConnected, isPlaying, nowPlaying, connect, playTrackWithQueue, togglePlayback } = useSpotify();
   const { getTopTracks, getRecentlyPlayed, saveTrack, search } = useSpotifyApi();
+  const { likeTrack } = useDiscoverLikes();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -155,20 +157,28 @@ const Discover = () => {
     });
   }, [isDragging]);
 
+  const doLike = useCallback((c: DiscoverCard) => {
+    // Save to local discover likes
+    likeTrack({
+      id: c.id, uri: c.uri, title: c.title, artist: c.artist,
+      cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs, likedAt: Date.now(),
+    });
+    // Also save to Spotify library
+    saveTrack(c.id).catch((err) => {
+      if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
+        saveErrorShown.current = true;
+        toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
+      }
+    });
+    toast({ title: "❤️ Liked!", description: `${c.title} added to your Discover Likes` });
+  }, [likeTrack, saveTrack]);
+
   const handleEnd = useCallback(() => {
     setIsDragging(false);
     if (Math.abs(offset.x) > SWIPE_THRESHOLD) {
       const dir = offset.x > 0 ? "right" : "left";
       setExitDir(dir);
-      // If swiped right (liked), save the track
-      if (dir === "right" && card) {
-        saveTrack(card.id).catch((err) => {
-          if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
-            saveErrorShown.current = true;
-            toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
-          }
-        });
-      }
+      if (dir === "right" && card) doLike(card);
       setTimeout(() => {
         setCurrentIndex((i) => i + 1);
         setOffset({ x: 0, y: 0 });
@@ -177,17 +187,10 @@ const Discover = () => {
     } else {
       setOffset({ x: 0, y: 0 });
     }
-  }, [offset.x, card, saveTrack]);
+  }, [offset.x, card, doLike]);
 
   const swipeButton = (dir: "left" | "right") => {
-    if (dir === "right" && card) {
-      saveTrack(card.id).catch((err) => {
-        if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
-          saveErrorShown.current = true;
-          toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
-        }
-      });
-    }
+    if (dir === "right" && card) doLike(card);
     setExitDir(dir);
     setOffset({ x: dir === "right" ? 300 : -300, y: 0 });
     setTimeout(() => {
