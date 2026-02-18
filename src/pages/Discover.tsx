@@ -166,10 +166,14 @@ const Discover = () => {
   const doLikeRef = useRef(doLike);
   useEffect(() => { doLikeRef.current = doLike; }, [doLike]);
 
-  // Attach touch listeners ONCE (stable refs mean no deps needed)
+  // Attach touch listeners when the card element is available.
+  // We use `card` as a dep so the effect re-runs after data loads (cardRef.current
+  // is null on first mount while loading). A flag prevents duplicate attachment.
+  const listenersAttached = useRef(false);
   useEffect(() => {
     const el = cardRef.current;
-    if (!el) return;
+    if (!el || listenersAttached.current) return;
+    listenersAttached.current = true;
 
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
@@ -218,12 +222,14 @@ const Discover = () => {
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
+      listenersAttached.current = false;
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
+  // Re-run when card becomes available (cardRef is null during loading)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once — all mutable state is accessed via refs
+  }, [card]);
 
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) doLike(card);
