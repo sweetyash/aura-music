@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Heart, X, Play, Pause, Music, TrendingUp, Lock, Loader2, RefreshCw, Disc, SkipBack, SkipForward } from "lucide-react";
+import { Heart, X, Play, Pause, Music, TrendingUp, Loader2, RefreshCw, Disc } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import GlobalSearch from "@/components/GlobalSearch";
@@ -52,7 +52,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 );
 
 const Discover = () => {
-  const { isConnected, playerReady, isPlaying, nowPlaying, connect, playTrackWithQueue, togglePlayback, skipNext, skipPrev } = useSpotify();
+  const { isConnected, isPlaying, nowPlaying, connect, playTrackWithQueue, togglePlayback } = useSpotify();
   const { getTopTracks, getRecommendations, getTopArtists, saveTrack, search } = useSpotifyApi();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -350,16 +350,14 @@ const Discover = () => {
                             className="flex items-center gap-2"
                           >
                             <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/25">
-                              {!playerReady ? (
-                                <Lock size={14} className="text-primary-foreground" />
-                              ) : isCurrentTrackPlaying ? (
+                              {isCurrentTrackPlaying ? (
                                 <Pause size={15} className="text-primary-foreground" fill="currentColor" />
                               ) : (
                                 <Play size={15} className="text-primary-foreground ml-0.5" fill="currentColor" />
                               )}
                             </div>
                             <span className="text-xs text-muted-foreground">
-                              {!playerReady ? "Connecting…" : isCurrentTrackPlaying ? `Playing · ${card.duration}` : `Play · ${card.duration}`}
+                              {isCurrentTrackPlaying ? `Playing · ${card.duration}` : `Play · ${card.duration}`}
                             </span>
                           </button>
                           {/* Vinyl disc indicator */}
