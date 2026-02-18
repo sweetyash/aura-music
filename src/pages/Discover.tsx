@@ -144,78 +144,79 @@ const Discover = () => {
   const cardDataRef = useRef<DiscoverCard | null>(null);
   useEffect(() => { cardDataRef.current = card || null; }, [card]);
 
-  const handleStart = useCallback((clientX: number, clientY: number) => {
-    startPos.current = { x: clientX, y: clientY };
-    hasDragged.current = false;
-    isDraggingRef.current = true;
-    setIsDragging(true);
-  }, []);
-
-  const handleMove = useCallback((clientX: number, clientY: number) => {
-    if (!isDraggingRef.current) return;
-    const dx = clientX - startPos.current.x;
-    const dy = clientY - startPos.current.y;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-      hasDragged.current = true;
-    }
-    const newOffset = { x: dx, y: dy * 0.3 };
-    offsetRef.current = newOffset;
-    setOffset(newOffset);
-  }, []);
+  // Keep latest callbacks in refs so touch handlers never go stale
+  const likeTrackRef = useRef(likeTrack);
+  const saveTrackRef = useRef(saveTrack);
+  useEffect(() => { likeTrackRef.current = likeTrack; }, [likeTrack]);
+  useEffect(() => { saveTrackRef.current = saveTrack; }, [saveTrack]);
 
   const doLike = useCallback((c: DiscoverCard) => {
-    likeTrack({
+    likeTrackRef.current({
       id: c.id, uri: c.uri, title: c.title, artist: c.artist,
       cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs, likedAt: Date.now(),
     });
-    saveTrack(c.id).catch((err) => {
+    saveTrackRef.current(c.id).catch((err) => {
       if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
         saveErrorShown.current = true;
         toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
       }
     });
     toast({ title: "❤️ Liked!", description: `${c.title} added to your Discover Likes` });
-  }, [likeTrack, saveTrack]);
+  }, []);
 
-  const handleEnd = useCallback(() => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-    setIsDragging(false);
-    const currentOffset = offsetRef.current;
-    if (Math.abs(currentOffset.x) > SWIPE_THRESHOLD) {
-      const dir = currentOffset.x > 0 ? "right" : "left";
-      setExitDir(dir);
-      const currentCard = cardDataRef.current;
-      if (dir === "right" && currentCard) doLike(currentCard);
-      setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
-        setOffset({ x: 0, y: 0 });
-        offsetRef.current = { x: 0, y: 0 };
-        setExitDir(null);
-      }, 350);
-    } else {
-      setOffset({ x: 0, y: 0 });
-      offsetRef.current = { x: 0, y: 0 };
-    }
-  }, [doLike]);
+  // Stable refs for gesture handlers — avoids re-adding touch listeners on every render
+  const doLikeRef = useRef(doLike);
+  useEffect(() => { doLikeRef.current = doLike; }, [doLike]);
 
-  // Attach non-passive touch listeners so we can preventDefault and block page scroll during swipe
+  // Attach touch listeners ONCE (stable refs mean no deps needed)
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      handleStart(e.touches[0].clientX, e.touches[0].clientY);
+      const touch = e.touches[0];
+      startPos.current = { x: touch.clientX, y: touch.clientY };
+      hasDragged.current = false;
+      isDraggingRef.current = true;
+      setIsDragging(true);
     };
+
     const onTouchMove = (e: TouchEvent) => {
       if (!isDraggingRef.current) return;
-      e.preventDefault(); // Prevents page scroll — requires non-passive listener
-      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+      e.preventDefault(); // Block page scroll — requires non-passive listener
+      const touch = e.touches[0];
+      const dx = touch.clientX - startPos.current.x;
+      const dy = touch.clientY - startPos.current.y;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasDragged.current = true;
+      const newOffset = { x: dx, y: dy * 0.3 };
+      offsetRef.current = newOffset;
+      setOffset(newOffset);
     };
-    const onTouchEnd = () => handleEnd();
+
+    const onTouchEnd = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      const currentOffset = offsetRef.current;
+      if (Math.abs(currentOffset.x) > SWIPE_THRESHOLD) {
+        const dir = currentOffset.x > 0 ? "right" : "left";
+        setExitDir(dir);
+        const currentCard = cardDataRef.current;
+        if (dir === "right" && currentCard) doLikeRef.current(currentCard);
+        setTimeout(() => {
+          setCurrentIndex((i) => i + 1);
+          setOffset({ x: 0, y: 0 });
+          offsetRef.current = { x: 0, y: 0 };
+          setExitDir(null);
+        }, 350);
+      } else {
+        setOffset({ x: 0, y: 0 });
+        offsetRef.current = { x: 0, y: 0 };
+      }
+    };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false }); // non-passive to allow preventDefault
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
@@ -223,7 +224,8 @@ const Discover = () => {
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  }, [handleStart, handleMove, handleEnd]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once — all mutable state is accessed via refs
 
   const swipeButton = (dir: "left" | "right") => {
     if (dir === "right" && card) doLike(card);
@@ -319,10 +321,41 @@ const Discover = () => {
                   ref={cardRef}
                   className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl cursor-grab active:cursor-grabbing select-none z-10"
                   style={cardStyle}
-                  onMouseDown={(e) => { e.preventDefault(); handleStart(e.clientX, e.clientY); }}
-                  onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
-                  onMouseUp={handleEnd}
-                  onMouseLeave={() => { if (isDraggingRef.current) handleEnd(); }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    startPos.current = { x: e.clientX, y: e.clientY };
+                    hasDragged.current = false;
+                    isDraggingRef.current = true;
+                    setIsDragging(true);
+                  }}
+                  onMouseMove={(e) => {
+                    if (!isDraggingRef.current) return;
+                    const dx = e.clientX - startPos.current.x;
+                    const dy = e.clientY - startPos.current.y;
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasDragged.current = true;
+                    const newOffset = { x: dx, y: dy * 0.3 };
+                    offsetRef.current = newOffset;
+                    setOffset(newOffset);
+                  }}
+                  onMouseUp={() => {
+                    if (!isDraggingRef.current) return;
+                    isDraggingRef.current = false;
+                    setIsDragging(false);
+                    const cur = offsetRef.current;
+                    if (Math.abs(cur.x) > SWIPE_THRESHOLD) {
+                      const dir = cur.x > 0 ? "right" : "left";
+                      setExitDir(dir);
+                      if (dir === "right" && cardDataRef.current) doLikeRef.current(cardDataRef.current);
+                      setTimeout(() => { setCurrentIndex((i) => i + 1); setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; setExitDir(null); }, 350);
+                    } else { setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; }
+                  }}
+                  onMouseLeave={() => {
+                    if (!isDraggingRef.current) return;
+                    isDraggingRef.current = false;
+                    setIsDragging(false);
+                    setOffset({ x: 0, y: 0 });
+                    offsetRef.current = { x: 0, y: 0 };
+                  }}
                 >
                   {/* Animated album art - Ken Burns effect */}
                   <img src={card.cover} alt={card.album} className="w-full h-full object-cover discover-card-art" />
