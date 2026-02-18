@@ -156,10 +156,8 @@ const Discover = () => {
       cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs, likedAt: Date.now(),
     });
     saveTrackRef.current(c.id).catch((err) => {
-      if (!saveErrorShown.current && (err?.message?.includes("Forbidden") || err?.message?.includes("403"))) {
-        saveErrorShown.current = true;
-        toast({ title: "Reconnect needed", description: "Disconnect & reconnect Spotify from Profile to enable liking songs.", variant: "destructive" });
-      }
+      // Silently fail — track is already saved locally; avoid alarming the user
+      console.warn("[Discover] saveTrack failed (non-critical):", err?.message);
     });
     toast({ title: "❤️ Liked!", description: `${c.title} added to your Discover Likes` });
   }, []);
