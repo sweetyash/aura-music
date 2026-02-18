@@ -162,6 +162,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = "";
+      audioRef.current.onended = null;
       audioRef.current = null;
     }
   }, []);
@@ -503,29 +504,30 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     const currentQueue = queueRef.current;
     const currentIdx = queueIndexRef.current;
 
-    // If SDK device is confirmed active AND no audio fallback running, use SDK
-    if (playerRef.current && deviceIdRef.current && !audioRef.current) {
-      await playerRef.current.nextTrack();
+    // Queue-based navigation first (always works reliably)
+    if (currentQueue.length > 0) {
+      let nextIdx: number;
+      if (shuffleRef.current) {
+        nextIdx = Math.floor(Math.random() * currentQueue.length);
+      } else {
+        nextIdx = currentIdx + 1;
+        if (nextIdx >= currentQueue.length) {
+          if (repeatRef.current) nextIdx = 0;
+          else return;
+        }
+      }
+      setQueueIndex(nextIdx);
+      queueIndexRef.current = nextIdx;
+      const next = currentQueue[nextIdx];
+      stopAudioPreview();
+      await playTrackInternalRef.current(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
       return;
     }
 
-    // Queue-based navigation (works for both audio fallback and when SDK device is lost)
-    if (currentQueue.length === 0) return;
-    let nextIdx: number;
-    if (shuffleRef.current) {
-      nextIdx = Math.floor(Math.random() * currentQueue.length);
-    } else {
-      nextIdx = currentIdx + 1;
-      if (nextIdx >= currentQueue.length) {
-        if (repeatRef.current) nextIdx = 0;
-        else return;
-      }
+    // Fallback: SDK next track (only if no queue)
+    if (playerRef.current && deviceIdRef.current) {
+      await playerRef.current.nextTrack();
     }
-    setQueueIndex(nextIdx);
-    queueIndexRef.current = nextIdx;
-    const next = currentQueue[nextIdx];
-    stopAudioPreview();
-    await playTrackInternalRef.current(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
   }, [stopAudioPreview]);
 
   const skipPrev = useCallback(async () => {
@@ -547,32 +549,37 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // If SDK device is confirmed active AND no audio fallback running, use SDK
-    if (playerRef.current && deviceIdRef.current && !audioRef.current) {
-      await playerRef.current.previousTrack();
+    // Queue-based navigation first (always works reliably)
+    if (currentQueue.length > 0) {
+      let prevIdx = currentIdx - 1;
+      if (prevIdx < 0) {
+        if (repeatRef.current) prevIdx = currentQueue.length - 1;
+        else {
+          // Restart current track from beginning
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            setProgress(0);
+            progressRef.current = 0;
+          } else if (playerRef.current && deviceIdRef.current) {
+            await playerRef.current.seek(0);
+            setProgress(0);
+            progressRef.current = 0;
+          }
+          return;
+        }
+      }
+      setQueueIndex(prevIdx);
+      queueIndexRef.current = prevIdx;
+      const prev = currentQueue[prevIdx];
+      stopAudioPreview();
+      await playTrackInternalRef.current(prev.uri, prev.title, prev.artist, prev.cover, prev.previewUrl, prev.durationMs);
       return;
     }
 
-    // Queue-based navigation
-    if (currentQueue.length === 0) return;
-    let prevIdx = currentIdx - 1;
-    if (prevIdx < 0) {
-      if (repeatRef.current) prevIdx = currentQueue.length - 1;
-      else {
-        // Restart current track
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0;
-          setProgress(0);
-          progressRef.current = 0;
-        }
-        return;
-      }
+    // Fallback: SDK prev track (only if no queue)
+    if (playerRef.current && deviceIdRef.current) {
+      await playerRef.current.previousTrack();
     }
-    setQueueIndex(prevIdx);
-    queueIndexRef.current = prevIdx;
-    const prev = currentQueue[prevIdx];
-    stopAudioPreview();
-    await playTrackInternalRef.current(prev.uri, prev.title, prev.artist, prev.cover, prev.previewUrl, prev.durationMs);
   }, [stopAudioPreview]);
 
   const toggleShuffle = useCallback(() => {
