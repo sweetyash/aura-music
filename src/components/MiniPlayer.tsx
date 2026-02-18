@@ -1,17 +1,16 @@
 import { useState } from "react";
-import { Play, Pause, Lock, ExternalLink } from "lucide-react";
+import { Play, Pause, Lock, SkipBack, SkipForward } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import ExpandedPlayer from "@/components/ExpandedPlayer";
 import album1 from "@/assets/album-1.jpg";
 
 const MiniPlayer = () => {
-  const { isConnected, nowPlaying, isPlaying, progress, duration, connect, togglePlayback } = useSpotify();
+  const { isConnected, nowPlaying, isPlaying, progress, duration, connect, togglePlayback, skipNext, skipPrev } = useSpotify();
   const [expanded, setExpanded] = useState(false);
 
   const cover = nowPlaying?.cover || album1;
   const title = nowPlaying?.title || "No track selected";
   const artist = nowPlaying?.artist || "Connect Spotify to play";
-  const trackId = nowPlaying?.trackId || "";
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
@@ -34,7 +33,7 @@ const MiniPlayer = () => {
           onClick={() => nowPlaying ? setExpanded(true) : undefined}
         >
           <div className="px-3 py-2">
-            <div className="max-w-lg mx-auto flex items-center gap-3">
+            <div className="max-w-lg mx-auto flex items-center gap-2">
               {/* Album art */}
               <div className="relative w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
                 <img src={cover} alt="Now playing" className="w-full h-full object-cover" />
@@ -46,7 +45,7 @@ const MiniPlayer = () => {
                 <p className="text-[11px] text-muted-foreground truncate">{artist}</p>
               </div>
 
-              {/* Play/Pause or Connect button */}
+              {/* Controls */}
               {!isConnected ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); connect(); }}
@@ -55,25 +54,27 @@ const MiniPlayer = () => {
                   <Lock size={14} />
                 </button>
               ) : nowPlaying ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); togglePlayback(); }}
-                  className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
-                >
-                  {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} className="ml-0.5" fill="currentColor" />}
-                </button>
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={skipPrev}
+                    className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors active:scale-90"
+                  >
+                    <SkipBack size={16} fill="currentColor" />
+                  </button>
+                  <button
+                    onClick={togglePlayback}
+                    className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground flex-shrink-0 active:scale-90 transition-transform shadow-md shadow-primary/20"
+                  >
+                    {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} className="ml-0.5" fill="currentColor" />}
+                  </button>
+                  <button
+                    onClick={skipNext}
+                    className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors active:scale-90"
+                  >
+                    <SkipForward size={16} fill="currentColor" />
+                  </button>
+                </div>
               ) : null}
-
-              {/* Spotify link */}
-              <a
-                href={trackId ? `https://open.spotify.com/track/${trackId}` : "https://open.spotify.com"}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-secondary text-xs font-semibold text-foreground hover:bg-surface-hover transition-colors flex-shrink-0"
-              >
-                <ExternalLink size={12} />
-                <span className="hidden sm:inline">Spotify</span>
-              </a>
             </div>
           </div>
         </div>

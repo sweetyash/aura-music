@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Heart, X, Play, Pause, Music, TrendingUp, Lock, Loader2, RefreshCw, Disc } from "lucide-react";
+import { Heart, X, Play, Pause, Music, TrendingUp, Lock, Loader2, RefreshCw, Disc, SkipBack, SkipForward } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import GlobalSearch from "@/components/GlobalSearch";
@@ -52,7 +52,7 @@ const PopularityBar = ({ value }: { value: number }) => (
 );
 
 const Discover = () => {
-  const { isConnected, playerReady, isPlaying, nowPlaying, connect, playTrack, togglePlayback } = useSpotify();
+  const { isConnected, playerReady, isPlaying, nowPlaying, connect, playTrackWithQueue, togglePlayback, skipNext, skipPrev } = useSpotify();
   const { getTopTracks, getRecommendations, getTopArtists, saveTrack, search } = useSpotifyApi();
   const [cards, setCards] = useState<DiscoverCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -340,7 +340,11 @@ const Discover = () => {
                               if (isCurrentTrackPlaying) {
                                 togglePlayback();
                               } else {
-                                playTrack(card.uri, card.title, card.artist, card.cover, card.previewUrl, card.durationMs);
+                                const queueTracks = cards.map(c => ({
+                                  uri: c.uri, title: c.title, artist: c.artist,
+                                  cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs,
+                                }));
+                                playTrackWithQueue(queueTracks, currentIndex);
                               }
                             }}
                             className="flex items-center gap-2"
