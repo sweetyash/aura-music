@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const STORAGE_KEY_REFRESH = "spotify_refresh_token";
+
 /** Initiate Spotify login – opens Spotify authorize page */
 export async function loginWithSpotify() {
   const { data, error } = await supabase.functions.invoke("spotify-login", {
@@ -10,14 +12,26 @@ export async function loginWithSpotify() {
 }
 
 /** Refresh the access token using the stored refresh token */
-export async function refreshSpotifyToken(): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("spotify-refresh");
+export async function refreshSpotifyToken(): Promise<{ accessToken: string; refreshToken: string }> {
+  const refreshToken = localStorage.getItem(STORAGE_KEY_REFRESH);
+  if (!refreshToken) throw new Error("No refresh token stored");
+
+  const { data, error } = await supabase.functions.invoke("spotify-refresh", {
+    body: { refresh_token: refreshToken },
+  });
   if (error) throw error;
-  return data.access_token;
+  if (!data?.access_token) throw new Error("No access token in refresh response");
+
+  // Update stored refresh token if Spotify rotated it
+  if (data.refresh_token) {
+    localStorage.setItem(STORAGE_KEY_REFRESH, data.refresh_token);
+  }
+
+  return { accessToken: data.access_token, refreshToken: data.refresh_token || refreshToken };
 }
 
 /** Check URL params for spotify_token after callback redirect */
-export function extractSpotifyTokenFromUrl(): string | null {
+export function extractSpotifyTokenFromUrl(): { token: string; refreshToken: string | null; expiresIn: number } | null {
   const params = new URLSearchParams(window.location.search);
 
   // Handle denied permissions
@@ -30,12 +44,24 @@ export function extractSpotifyTokenFromUrl(): string | null {
   }
 
   const token = params.get("spotify_token");
-  if (token) {
-    const url = new URL(window.location.href);
-    url.searchParams.delete("spotify_token");
-    window.history.replaceState({}, "", url.pathname);
+  if (!token) return null;
+
+  const refreshToken = params.get("spotify_refresh_token");
+  const expiresIn = parseInt(params.get("spotify_expires_in") || "3600", 10);
+
+  // Store refresh token in localStorage
+  if (refreshToken) {
+    localStorage.setItem(STORAGE_KEY_REFRESH, refreshToken);
   }
-  return token;
+
+  // Clean URL
+  const url = new URL(window.location.href);
+  url.searchParams.delete("spotify_token");
+  url.searchParams.delete("spotify_refresh_token");
+  url.searchParams.delete("spotify_expires_in");
+  window.history.replaceState({}, "", url.pathname);
+
+  return { token, refreshToken, expiresIn };
 }
 
 /** Check for spotify_error in URL (denied permissions) */
