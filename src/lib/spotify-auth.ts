@@ -10,10 +10,15 @@ export async function loginWithSpotify() {
     body: { origin: window.location.origin },
   });
   if (error) throw error;
-  // Use top-level navigation so OAuth works even when embedded in an iframe
-  if (window.top && window.top !== window) {
-    window.top.location.href = data.url;
-  } else {
+  // Try top-level navigation (works on published app), fall back if sandboxed
+  try {
+    if (window.top && window.top !== window) {
+      window.top.location.href = data.url;
+    } else {
+      window.location.href = data.url;
+    }
+  } catch {
+    // Cross-origin iframe sandbox blocks top navigation — navigate current frame
     window.location.href = data.url;
   }
 }
