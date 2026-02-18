@@ -63,6 +63,8 @@ const Discover = () => {
   const [exitDir, setExitDir] = useState<"left" | "right" | null>(null);
   const [searchActive, setSearchActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [floatingHearts, setFloatingHearts] = useState<{ id: number; x: number; y: number }[]>([]);
+  const heartIdRef = useRef(0);
   const startPos = useRef({ x: 0, y: 0 });
   const hasDragged = useRef(false);
   const isDraggingRef = useRef(false);
@@ -150,6 +152,20 @@ const Discover = () => {
   useEffect(() => { likeTrackRef.current = likeTrack; }, [likeTrack]);
   useEffect(() => { saveTrackRef.current = saveTrack; }, [saveTrack]);
 
+  const spawnHearts = useCallback((cardEl?: HTMLDivElement | null) => {
+    const rect = cardEl?.getBoundingClientRect();
+    const cx = rect ? rect.left + rect.width * 0.5 : window.innerWidth * 0.5;
+    const cy = rect ? rect.top + rect.height * 0.6 : window.innerHeight * 0.5;
+    const id = ++heartIdRef.current;
+    const hearts = [
+      { id, x: cx, y: cy },
+      { id: id + 0.1, x: cx - 22, y: cy + 10 },
+      { id: id + 0.2, x: cx + 18, y: cy + 5 },
+    ];
+    setFloatingHearts(prev => [...prev, ...hearts]);
+    setTimeout(() => setFloatingHearts(prev => prev.filter(h => !hearts.find(fh => fh.id === h.id))), 1000);
+  }, []);
+
   const doLike = useCallback((c: DiscoverCard) => {
     likeTrackRef.current({
       id: c.id, uri: c.uri, title: c.title, artist: c.artist,
@@ -159,8 +175,9 @@ const Discover = () => {
       // Silently fail — track is already saved locally; avoid alarming the user
       console.warn("[Discover] saveTrack failed (non-critical):", err?.message);
     });
+    spawnHearts(cardRef.current);
     toast({ title: "❤️ Liked!", description: `${c.title} added to your Discover Likes` });
-  }, []);
+  }, [spawnHearts]);
 
   // Stable refs for gesture handlers — avoids re-adding touch listeners on every render
   const doLikeRef = useRef(doLike);
@@ -276,6 +293,20 @@ const Discover = () => {
 
   return (
     <div className="flex flex-col items-center px-4 pt-6 pb-4 min-h-[calc(100vh-4rem)]">
+      {/* Floating hearts portal */}
+      {floatingHearts.map((h, i) => (
+        <div
+          key={h.id}
+          className="pointer-events-none fixed z-[9999]"
+          style={{ left: h.x, top: h.y, transform: "translate(-50%, -50%)" }}
+        >
+          <Heart
+            size={i % 3 === 0 ? 32 : i % 3 === 1 ? 24 : 18}
+            style={{ color: "hsl(141 73% 42%)", fill: "hsl(141 73% 42%)" }}
+            className={i % 3 === 0 ? "heart-float-1" : i % 3 === 1 ? "heart-float-2" : "heart-float-3"}
+          />
+        </div>
+      ))}
       <h1 className="text-xl font-bold text-foreground mb-0.5">Discover</h1>
       <p className="text-sm text-muted-foreground mb-4">Personalized picks just for you</p>
 
