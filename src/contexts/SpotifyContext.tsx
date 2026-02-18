@@ -12,6 +12,15 @@ interface NowPlaying {
   durationMs: number;
 }
 
+interface QueueTrack {
+  uri: string;
+  title: string;
+  artist: string;
+  cover: string;
+  previewUrl?: string | null;
+  durationMs?: number;
+}
+
 interface SpotifyAuthCtx {
   token: string | null;
   isConnected: boolean;
@@ -21,14 +30,21 @@ interface SpotifyAuthCtx {
   nowPlaying: NowPlaying | null;
   progress: number;
   duration: number;
+  queue: QueueTrack[];
+  queueIndex: number;
+  shuffleOn: boolean;
+  repeatOn: boolean;
   connect: () => Promise<void>;
   refresh: () => Promise<void>;
   disconnect: () => void;
   playTrack: (uri: string, title: string, artist: string, cover: string, previewUrl?: string | null, durationMs?: number) => void;
+  playTrackWithQueue: (tracks: QueueTrack[], startIndex: number) => void;
   togglePlayback: () => void;
   seek: (time: number) => void;
   skipNext: () => void;
   skipPrev: () => void;
+  toggleShuffle: () => void;
+  toggleRepeat: () => void;
 }
 
 const SpotifyContext = createContext<SpotifyAuthCtx>({
@@ -40,14 +56,21 @@ const SpotifyContext = createContext<SpotifyAuthCtx>({
   nowPlaying: null,
   progress: 0,
   duration: 0,
+  queue: [],
+  queueIndex: -1,
+  shuffleOn: false,
+  repeatOn: false,
   connect: async () => {},
   refresh: async () => {},
   disconnect: () => {},
   playTrack: () => {},
+  playTrackWithQueue: () => {},
   togglePlayback: () => {},
   seek: () => {},
   skipNext: () => {},
   skipPrev: () => {},
+  toggleShuffle: () => {},
+  toggleRepeat: () => {},
 });
 
 export const useSpotify = () => useContext(SpotifyContext);
@@ -87,15 +110,28 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [queue, setQueue] = useState<QueueTrack[]>([]);
+  const [queueIndex, setQueueIndex] = useState(-1);
+  const [shuffleOn, setShuffleOn] = useState(false);
+  const [repeatOn, setRepeatOn] = useState(false);
+
   const tokenExpiresAt = useRef<number>(Number(localStorage.getItem(STORAGE_KEY_EXPIRES) || "0"));
   const playerRef = useRef<SpotifyPlayer | null>(null);
   const deviceIdRef = useRef<string | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenRef = useRef<string | null>(token);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const queueRef = useRef<QueueTrack[]>([]);
+  const queueIndexRef = useRef<number>(-1);
+  const repeatRef = useRef(false);
+  const shuffleRef = useRef(false);
 
-  // Keep tokenRef in sync
+  // Keep refs in sync
   useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
+  useEffect(() => { repeatRef.current = repeatOn; }, [repeatOn]);
+  useEffect(() => { shuffleRef.current = shuffleOn; }, [shuffleOn]);
 
   const setToken = useCallback((t: string | null) => {
     setTokenState(t);
@@ -157,13 +193,102 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setNowPlaying(null);
     setProgress(0);
     setDuration(0);
+    setQueue([]);
+    setQueueIndex(-1);
     tokenExpiresAt.current = 0;
     localStorage.removeItem(STORAGE_KEY_EXPIRES);
   }, [setToken, stopProgressTracking, stopAudioPreview]);
 
+  // Core play function (internal)
+  const playTrackInternal = useCallback(async (
+    uri: string, title: string, artist: string, cover: string,
+    previewUrl?: string | null, durationMs?: number
+  ) => {
+    const trackId = uri.replace("spotify:track:", "");
+    log("play_track", { trackId, title, deviceId: deviceIdRef.current });
+
+    setNowPlaying({
+      trackUri: uri, trackId, title, artist, cover,
+      previewUrl: previewUrl || null,
+      durationMs: durationMs || 0,
+    });
+
+    // Use Web Playback SDK if device is ready
+    if (deviceIdRef.current && tokenRef.current) {
+      try {
+        const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceIdRef.current}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${tokenRef.current}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ uris: [uri] }),
+        });
+
+        if (res.ok || res.status === 204) {
+          setIsPlaying(true);
+          startProgressTracking();
+          return;
+        }
+
+        const errorData = await res.json().catch(() => ({}));
+        log("play_error", { status: res.status, error: errorData });
+      } catch (err) {
+        log("play_fetch_error", { error: String(err) });
+      }
+    }
+
+    // Fallback: HTML5 Audio with preview URL
+    if (previewUrl) {
+      stopAudioPreview();
+      const audio = new Audio(previewUrl);
+      // Boost audio quality settings
+      audio.preload = "auto";
+      audioRef.current = audio;
+
+      audio.addEventListener("timeupdate", () => {
+        setProgress(audio.currentTime);
+        setDuration(audio.duration || 30);
+      });
+      audio.addEventListener("ended", () => {
+        if (repeatRef.current) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        } else {
+          setIsPlaying(false);
+          setProgress(0);
+          // Auto-advance to next track
+          const nextIdx = queueIndexRef.current + 1;
+          if (nextIdx < queueRef.current.length) {
+            const next = queueRef.current[nextIdx];
+            setQueueIndex(nextIdx);
+            queueIndexRef.current = nextIdx;
+            setTimeout(() => {
+              playTrackInternal(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
+            }, 500);
+          }
+        }
+      });
+      audio.addEventListener("error", () => {
+        log("audio_preview_error", { trackId });
+        toast({ title: "Preview unavailable", description: "This track cannot be played in-app.", variant: "destructive" });
+      });
+
+      audio.play().then(() => {
+        setIsPlaying(true);
+        setDuration(audio.duration || 30);
+      }).catch(() => {
+        toast({ title: "Playback failed", description: "Could not play this track.", variant: "destructive" });
+      });
+      return;
+    }
+
+    toast({ title: "Playback unavailable", description: "Waiting for player to connect. Try again in a moment.", variant: "destructive" });
+  }, [startProgressTracking, stopAudioPreview]);
+
   // Initialize Web Playback SDK
   const initPlayer = useCallback((accessToken: string) => {
-    if (playerRef.current) return; // Already initialized
+    if (playerRef.current) return;
 
     const initSDK = () => {
       if (!window.Spotify) {
@@ -246,7 +371,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [startProgressTracking, stopProgressTracking]);
 
-  // On mount, check for callback token in URL OR restore from localStorage
+  // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
     const urlToken = extractSpotifyTokenFromUrl();
     const activeToken = urlToken || token;
@@ -297,82 +422,31 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Spotify Disconnected", description: "You have been disconnected from Spotify." });
   }, [clearState]);
 
-  const playTrack = useCallback(async (uri: string, title: string, artist: string, cover: string, previewUrl?: string | null, durationMs?: number) => {
-    const trackId = uri.replace("spotify:track:", "");
-    log("play_track", { trackId, title, deviceId: deviceIdRef.current });
+  const playTrack = useCallback(async (
+    uri: string, title: string, artist: string, cover: string,
+    previewUrl?: string | null, durationMs?: number
+  ) => {
+    // Single track play — set as a one-item queue
+    const track: QueueTrack = { uri, title, artist, cover, previewUrl, durationMs };
+    setQueue([track]);
+    setQueueIndex(0);
+    queueRef.current = [track];
+    queueIndexRef.current = 0;
+    await playTrackInternal(uri, title, artist, cover, previewUrl, durationMs);
+  }, [playTrackInternal]);
 
-    // Set now playing immediately for UI
-    setNowPlaying({
-      trackUri: uri, trackId, title, artist, cover,
-      previewUrl: previewUrl || null,
-      durationMs: durationMs || 0,
-    });
-
-    // Use Web Playback SDK if device is ready
-    if (deviceIdRef.current && tokenRef.current) {
-      try {
-        const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceIdRef.current}`, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${tokenRef.current}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ uris: [uri] }),
-        });
-
-        if (res.ok || res.status === 204) {
-          setIsPlaying(true);
-          startProgressTracking();
-          return;
-        }
-
-        const errorData = await res.json().catch(() => ({}));
-        log("play_error", { status: res.status, error: errorData });
-
-        // If 403/premium required, fall back to preview
-        if (res.status === 403) {
-          log("sdk_403_fallback", { trackId });
-          // Don't return - fall through to preview/audio fallback below
-        }
-      } catch (err) {
-        log("play_fetch_error", { error: String(err) });
-      }
+  const playTrackWithQueue = useCallback(async (tracks: QueueTrack[], startIndex: number) => {
+    setQueue(tracks);
+    setQueueIndex(startIndex);
+    queueRef.current = tracks;
+    queueIndexRef.current = startIndex;
+    const t = tracks[startIndex];
+    if (t) {
+      await playTrackInternal(t.uri, t.title, t.artist, t.cover, t.previewUrl, t.durationMs);
     }
-
-    // Fallback: use HTML5 Audio with preview URL
-    if (previewUrl) {
-      stopAudioPreview();
-      const audio = new Audio(previewUrl);
-      audioRef.current = audio;
-      
-      audio.addEventListener("timeupdate", () => {
-        setProgress(audio.currentTime);
-        setDuration(audio.duration || 30);
-      });
-      audio.addEventListener("ended", () => {
-        setIsPlaying(false);
-        setProgress(0);
-      });
-      audio.addEventListener("error", () => {
-        log("audio_preview_error", { trackId });
-        toast({ title: "Preview unavailable", description: "This track cannot be played in-app.", variant: "destructive" });
-      });
-
-      audio.play().then(() => {
-        setIsPlaying(true);
-        setDuration(audio.duration || 30);
-      }).catch(() => {
-        toast({ title: "Playback failed", description: "Could not play this track.", variant: "destructive" });
-      });
-      return;
-    }
-
-    // Last fallback: show error, do NOT redirect
-    toast({ title: "Playback unavailable", description: "Waiting for player to connect. Try again in a moment.", variant: "destructive" });
-  }, [startProgressTracking, stopAudioPreview]);
+  }, [playTrackInternal]);
 
   const togglePlayback = useCallback(async () => {
-    // Handle HTML5 Audio preview
     if (audioRef.current) {
       if (audioRef.current.paused) {
         await audioRef.current.play();
@@ -401,15 +475,72 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const skipNext = useCallback(async () => {
-    if (playerRef.current) {
+    const currentQueue = queueRef.current;
+    const currentIdx = queueIndexRef.current;
+
+    // If SDK player is active, use it
+    if (playerRef.current && deviceIdRef.current && !audioRef.current) {
       await playerRef.current.nextTrack();
+      return;
     }
-  }, []);
+
+    // Queue-based next
+    if (currentQueue.length > 0) {
+      let nextIdx: number;
+      if (shuffleRef.current) {
+        nextIdx = Math.floor(Math.random() * currentQueue.length);
+      } else {
+        nextIdx = currentIdx + 1;
+        if (nextIdx >= currentQueue.length) {
+          if (repeatRef.current) nextIdx = 0;
+          else return;
+        }
+      }
+      setQueueIndex(nextIdx);
+      queueIndexRef.current = nextIdx;
+      const next = currentQueue[nextIdx];
+      stopAudioPreview();
+      await playTrackInternal(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
+    }
+  }, [playTrackInternal, stopAudioPreview]);
 
   const skipPrev = useCallback(async () => {
-    if (playerRef.current) {
-      await playerRef.current.previousTrack();
+    const currentQueue = queueRef.current;
+    const currentIdx = queueIndexRef.current;
+
+    // If progress > 3s, restart current track
+    if (progress > 3) {
+      seek(0);
+      return;
     }
+
+    // If SDK player is active, use it
+    if (playerRef.current && deviceIdRef.current && !audioRef.current) {
+      await playerRef.current.previousTrack();
+      return;
+    }
+
+    // Queue-based prev
+    if (currentQueue.length > 0) {
+      let prevIdx = currentIdx - 1;
+      if (prevIdx < 0) {
+        if (repeatRef.current) prevIdx = currentQueue.length - 1;
+        else { seek(0); return; }
+      }
+      setQueueIndex(prevIdx);
+      queueIndexRef.current = prevIdx;
+      const prev = currentQueue[prevIdx];
+      stopAudioPreview();
+      await playTrackInternal(prev.uri, prev.title, prev.artist, prev.cover, prev.previewUrl, prev.durationMs);
+    }
+  }, [progress, seek, playTrackInternal, stopAudioPreview]);
+
+  const toggleShuffle = useCallback(() => {
+    setShuffleOn(s => !s);
+  }, []);
+
+  const toggleRepeat = useCallback(() => {
+    setRepeatOn(r => !r);
   }, []);
 
   // Cleanup on unmount
@@ -434,14 +565,21 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         nowPlaying,
         progress,
         duration,
+        queue,
+        queueIndex,
+        shuffleOn,
+        repeatOn,
         connect,
         refresh,
         disconnect,
         playTrack,
+        playTrackWithQueue,
         togglePlayback,
         seek,
         skipNext,
         skipPrev,
+        toggleShuffle,
+        toggleRepeat,
       }}
     >
       {children}
