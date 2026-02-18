@@ -474,6 +474,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const playTrackWithQueue = useCallback(async (tracks: QueueTrack[], startIndex: number) => {
+    // Stop any currently playing audio before starting new one
+    stopAudioPreview();
+    setIsPlaying(false);
+    setProgress(0);
+    progressRef.current = 0;
+    // Update queue refs synchronously
     setQueue(tracks);
     setQueueIndex(startIndex);
     queueRef.current = tracks;
@@ -482,7 +488,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (t) {
       await playTrackInternalRef.current(t.uri, t.title, t.artist, t.cover, t.previewUrl, t.durationMs);
     }
-  }, []);
+  }, [stopAudioPreview]);
 
   const togglePlayback = useCallback(async () => {
     if (audioRef.current) {
