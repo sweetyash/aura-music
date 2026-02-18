@@ -413,6 +413,25 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [startProgressTracking, stopProgressTracking]);
 
+  // Helper: silently refresh token and validate
+  const silentRefresh = useCallback(async (): Promise<boolean> => {
+    const storedRefresh = localStorage.getItem("spotify_refresh_token");
+    if (!storedRefresh) return false;
+    try {
+      const { accessToken } = await refreshSpotifyToken();
+      setToken(accessToken);
+      setTokenExpiry(Date.now() + 3600 * 1000);
+      const { valid, premium } = await validateToken(accessToken);
+      if (!valid) { clearState(); return false; }
+      setIsPremium(premium);
+      if (premium) initPlayer(accessToken);
+      return true;
+    } catch {
+      clearState();
+      return false;
+    }
+  }, [clearState, initPlayer, setToken, setTokenExpiry]);
+
   // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
     const urlResult = extractSpotifyTokenFromUrl();
@@ -425,67 +444,29 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem("spotify_refresh_token", urlResult.refreshToken);
       }
       validateToken(urlResult.token).then(({ valid, premium }) => {
-        if (!valid) {
-          clearState();
-          return;
-        }
+        if (!valid) { clearState(); return; }
         setIsPremium(premium);
         if (premium) initPlayer(urlResult.token);
       });
       return;
     }
 
-    // No URL token — check if we have a stored token
+    // No URL token — check stored token
     if (!token) return;
 
     const isExpired = tokenExpiresAt.current < Date.now() + 60_000;
 
     if (isExpired) {
-      // Try to refresh silently before validating
-      const refreshToken = localStorage.getItem("spotify_refresh_token");
-      if (!refreshToken) {
-        // No refresh token either — clear silently (don't show error toast)
-        clearState();
-        return;
-      }
-      // Attempt silent refresh
-      import("@/lib/spotify-auth").then(({ refreshSpotifyToken }) =>
-        refreshSpotifyToken()
-          .then(({ accessToken }) => {
-            setToken(accessToken);
-            setTokenExpiry(Date.now() + 3600 * 1000);
-            return validateToken(accessToken);
-          })
-          .then(({ valid, premium }) => {
-            if (!valid) { clearState(); return; }
-            setIsPremium(premium);
-            if (premium) initPlayer(tokenRef.current!);
-          })
-          .catch(() => clearState())
-      );
+      // Try silent refresh first, no error toast
+      silentRefresh();
       return;
     }
 
-    // Token still valid — just validate
+    // Token not expired — validate it
     validateToken(token).then(({ valid, premium }) => {
       if (!valid) {
-        // Try refresh before giving up
-        const refreshToken = localStorage.getItem("spotify_refresh_token");
-        if (!refreshToken) { clearState(); return; }
-        import("@/lib/spotify-auth").then(({ refreshSpotifyToken }) =>
-          refreshSpotifyToken()
-            .then(({ accessToken }) => {
-              setToken(accessToken);
-              setTokenExpiry(Date.now() + 3600 * 1000);
-              return validateToken(accessToken);
-            })
-            .then(({ valid: v2, premium: p2 }) => {
-              if (!v2) { clearState(); return; }
-              setIsPremium(p2);
-              if (p2) initPlayer(tokenRef.current!);
-            })
-            .catch(() => clearState())
-        );
+        // Try silent refresh before giving up
+        silentRefresh();
         return;
       }
       setIsPremium(premium);
