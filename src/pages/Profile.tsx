@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Settings, LogOut, Music, Loader2, Sparkles, Play, User as UserIcon, Crown, ExternalLink, Users, MapPin, Calendar } from "lucide-react";
+import { Settings, LogOut, Music, Loader2, Sparkles, Play, User as UserIcon, Crown, ExternalLink, Users, MapPin, Download } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyArtist, SpotifyTrack, getArtistImage, getTrackCover } from "@/hooks/useSpotifyApi";
 import { toast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 interface AiRec {
   name: string;
@@ -251,6 +251,25 @@ const Profile = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Install App */}
+      <div className="bg-primary/5 rounded-2xl p-4 border border-primary/10 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0">
+            <Download size={18} className="text-primary-foreground" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-foreground">Install Aura Music</p>
+            <p className="text-xs text-muted-foreground">Add to your home screen like a real app</p>
+          </div>
+          <Link
+            to="/install"
+            className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors"
+          >
+            Install
+          </Link>
+        </div>
       </div>
 
       {/* Danger Zone */}

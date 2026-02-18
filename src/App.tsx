@@ -12,6 +12,7 @@ import NewReleases from "@/pages/NewReleases";
 import LikedSongs from "@/pages/LikedSongs";
 import Playlists from "@/pages/Playlists";
 import Profile from "@/pages/Profile";
+import Install from "@/pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
               <Route path="/liked" element={<LikedSongs />} />
               <Route path="/playlists" element={<Playlists />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/install" element={<Install />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <MiniPlayer />
