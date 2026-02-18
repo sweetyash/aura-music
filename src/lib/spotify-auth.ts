@@ -1,14 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_KEY_REFRESH = "spotify_refresh_token";
+const STORAGE_KEY_TOKEN = "spotify_access_token";
+const STORAGE_KEY_EXPIRES = "spotify_token_expires";
 
-/** Initiate Spotify login – opens Spotify authorize page */
+/** Initiate Spotify login – redirects to Spotify authorize page */
 export async function loginWithSpotify() {
   const { data, error } = await supabase.functions.invoke("spotify-login", {
     body: { origin: window.location.origin },
   });
   if (error) throw error;
-  window.location.href = data.url;
+  // Use top-level navigation so OAuth works even when embedded in an iframe
+  if (window.top && window.top !== window) {
+    window.top.location.href = data.url;
+  } else {
+    window.location.href = data.url;
+  }
 }
 
 /** Refresh the access token using the stored refresh token */
@@ -26,6 +33,9 @@ export async function refreshSpotifyToken(): Promise<{ accessToken: string; refr
   if (data.refresh_token) {
     localStorage.setItem(STORAGE_KEY_REFRESH, data.refresh_token);
   }
+  // Persist the new access token
+  localStorage.setItem(STORAGE_KEY_TOKEN, data.access_token);
+  localStorage.setItem(STORAGE_KEY_EXPIRES, String(Date.now() + (data.expires_in || 3600) * 1000));
 
   return { accessToken: data.access_token, refreshToken: data.refresh_token || refreshToken };
 }
@@ -49,7 +59,9 @@ export function extractSpotifyTokenFromUrl(): { token: string; refreshToken: str
   const refreshToken = params.get("spotify_refresh_token");
   const expiresIn = parseInt(params.get("spotify_expires_in") || "3600", 10);
 
-  // Store refresh token in localStorage
+  // Persist tokens immediately
+  localStorage.setItem(STORAGE_KEY_TOKEN, token);
+  localStorage.setItem(STORAGE_KEY_EXPIRES, String(Date.now() + expiresIn * 1000));
   if (refreshToken) {
     localStorage.setItem(STORAGE_KEY_REFRESH, refreshToken);
   }
