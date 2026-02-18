@@ -424,9 +424,24 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       setTokenExpiry(Date.now() + 3600 * 1000);
     }
 
-    validateToken(activeToken).then(({ valid, premium }) => {
+    validateToken(activeToken).then(async ({ valid, premium }) => {
       if (!valid) {
-        toast({ title: "Spotify Connection Issue", description: "Try disconnecting and reconnecting from Profile.", variant: "destructive" });
+        // Try to silently refresh the token before giving up
+        try {
+          const freshToken = await refreshSpotifyToken();
+          const { valid: refreshedValid, premium: refreshedPremium } = await validateToken(freshToken);
+          if (refreshedValid) {
+            setToken(freshToken);
+            setTokenExpiry(Date.now() + 3600 * 1000);
+            setIsPremium(refreshedPremium);
+            if (refreshedPremium) initPlayer(freshToken);
+            return;
+          }
+        } catch {
+          // refresh failed — fall through to clearState
+        }
+        // Token truly invalid — clear everything so user sees the connect screen
+        clearState();
         return;
       }
       setIsPremium(premium);
