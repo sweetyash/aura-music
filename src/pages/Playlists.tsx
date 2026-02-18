@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { ListMusic, Play, Plus, Loader2, Music, ChevronRight, X, Lock, Globe } from "lucide-react";
+import { ListMusic, Play, Plus, Loader2, Music, ChevronRight, X, Lock, Globe, RefreshCw } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyPlaylist, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import { toast } from "@/hooks/use-toast";
 
 const Playlists = () => {
-  const { isConnected, playTrackWithQueue, connect } = useSpotify();
+  const { isConnected, playTrackWithQueue, connect, disconnect } = useSpotify();
   const { getPlaylists, getPlaylistTracks, createPlaylist, getCurrentUser } = useSpotifyApi();
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,6 +19,7 @@ const Playlists = () => {
   const [newDesc, setNewDesc] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [permissionError, setPermissionError] = useState(false);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -56,9 +57,20 @@ const Playlists = () => {
       setIsPublic(false);
       setShowCreate(false);
       toast({ title: "✅ Playlist Created!", description: `"${newName.trim()}" is ready on Spotify.` });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Create playlist error:", err);
-      toast({ title: "Error", description: "Could not create playlist. Please try again.", variant: "destructive" });
+      const isForbidden = err?.message?.toLowerCase().includes("forbidden") || err?.message?.includes("403");
+      if (isForbidden) {
+        setPermissionError(true);
+        setShowCreate(false);
+        toast({
+          title: "Permission Required",
+          description: "Please reconnect Spotify to grant playlist creation access.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: "Could not create playlist. Please try again.", variant: "destructive" });
+      }
     } finally {
       setCreating(false);
     }
@@ -280,6 +292,23 @@ const Playlists = () => {
         </button>
       </div>
       <p className="text-sm text-muted-foreground mb-5">{playlists.length} playlists</p>
+
+      {/* Permission error banner */}
+      {permissionError && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 mb-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-destructive mb-0.5">Playlist Permission Required</p>
+            <p className="text-xs text-muted-foreground">Your Spotify session needs to be refreshed to allow creating playlists. Please reconnect.</p>
+          </div>
+          <button
+            onClick={async () => { disconnect(); setTimeout(() => connect(), 300); }}
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-destructive text-destructive-foreground text-xs font-semibold flex-shrink-0"
+          >
+            <RefreshCw size={12} />
+            Reconnect
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
