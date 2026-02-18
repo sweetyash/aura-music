@@ -8,7 +8,9 @@ export async function loginWithSpotify() {
     body: { origin: window.location.origin },
   });
   if (error) throw error;
-  window.location.href = data.url;
+  // Use top-level window to escape iframes (e.g. Lovable preview)
+  // Spotify rejects loading inside iframes
+  (window.top || window).location.href = data.url;
 }
 
 /** Refresh the access token using the stored refresh token */
