@@ -55,21 +55,22 @@ Deno.serve(async (req) => {
     }
 
     const text = await res.text();
-    let data;
+    let data: unknown;
     try {
-      data = text ? JSON.parse(text) : { success: true };
+      data = text ? JSON.parse(text) : null;
     } catch {
-      data = { success: true };
+      data = null;
     }
 
     if (!res.ok) {
-      return new Response(JSON.stringify(data), {
+      // Always forward the real error with the real status code
+      return new Response(JSON.stringify(data ?? { error: { status: res.status, message: res.statusText } }), {
         status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(data ?? {}), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
