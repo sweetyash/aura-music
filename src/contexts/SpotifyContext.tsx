@@ -445,6 +445,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       if (urlResult.refreshToken) {
         localStorage.setItem("spotify_refresh_token", urlResult.refreshToken);
       }
+      toast({ title: "✅ Spotify Connected!", description: "Welcome back 🎵" });
       // Validate in background — but NEVER wipe a brand-new token on network failure
       validateToken(urlResult.token).then(({ valid, premium }) => {
         if (valid) {
@@ -494,57 +495,14 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, clearState, setToken, setTokenExpiry]);
 
-  // Listen for token written to localStorage by the OAuth callback tab
+  // Connect: redirects to Spotify OAuth. On return, extractSpotifyTokenFromUrl handles the token.
   const connect = useCallback(async () => {
-    await loginWithSpotify();
-
-    // The browser fires a "storage" event in OTHER tabs/windows when localStorage changes.
-    // This is the native, reliable mechanism for cross-tab communication.
-    const applyToken = (accessToken: string) => {
-      const expiry = Number(localStorage.getItem("spotify_token_expires") || "0");
-      setToken(accessToken);
-      setTokenExpiry(expiry || Date.now() + 3600 * 1000);
-      // Apply token to state immediately — don't block on validation
-      setIsPremium(null);
-      toast({ title: "Spotify Connected!", description: "Welcome back 🎵" });
-      // Validate & init player in background
-      validateToken(accessToken).then(({ valid, premium }) => {
-        if (valid) {
-          setIsPremium(premium);
-          if (premium) initPlayer(accessToken);
-        }
-      });
-    };
-
-    // 1. Storage event: fires when another tab writes to localStorage
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "spotify_access_token" && e.newValue) {
-        cleanup();
-        applyToken(e.newValue);
-      }
-    };
-
-    // 2. Polling fallback: catches same-tab writes (popup blocked → direct navigation)
-    const pollStart = Date.now();
-    const poll = setInterval(() => {
-      const storedToken = localStorage.getItem("spotify_access_token");
-      const storedExpiry = Number(localStorage.getItem("spotify_token_expires") || "0");
-      if (storedToken && storedExpiry > Date.now()) {
-        cleanup();
-        applyToken(storedToken);
-      }
-      if (Date.now() - pollStart > 5 * 60 * 1000) cleanup();
-    }, 500);
-
-    const cleanup = () => {
-      window.removeEventListener("storage", handleStorage);
-      clearInterval(poll);
-    };
-
-    window.addEventListener("storage", handleStorage);
-    // Auto-cleanup after 5 min if user abandons the flow
-    setTimeout(cleanup, 5 * 60 * 1000);
-  }, [initPlayer, setToken, setTokenExpiry]);
+    try {
+      await loginWithSpotify();
+    } catch (err) {
+      toast({ title: "Login Failed", description: "Could not reach Spotify. Please try again.", variant: "destructive" });
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     const fresh = await ensureToken();

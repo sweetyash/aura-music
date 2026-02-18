@@ -4,20 +4,17 @@ const STORAGE_KEY_REFRESH = "spotify_refresh_token";
 const STORAGE_KEY_TOKEN = "spotify_access_token";
 const STORAGE_KEY_EXPIRES = "spotify_token_expires";
 
-/** Initiate Spotify login – opens in new tab to handle iframe sandbox restrictions */
+/** Initiate Spotify login – redirects the current tab to Spotify OAuth */
 export async function loginWithSpotify() {
   const { data, error } = await supabase.functions.invoke("spotify-login", {
     body: { origin: getAppOrigin() },
   });
   if (error) throw error;
 
-  // Open in a new tab/window — this bypasses iframe sandbox restrictions
-  // and lets the OAuth callback redirect back to the real app origin.
-  const popup = window.open(data.url, "_blank", "noopener,noreferrer");
-  if (!popup) {
-    // If popup was blocked, fall back to direct navigation
-    window.location.href = data.url;
-  }
+  // Navigate the current tab directly — this is the most reliable approach.
+  // The callback will redirect back to this origin with tokens in the URL,
+  // and extractSpotifyTokenFromUrl() will handle them on mount.
+  window.location.href = data.url;
 }
 
 /** Get the real app origin (not the iframe sandbox origin) */
