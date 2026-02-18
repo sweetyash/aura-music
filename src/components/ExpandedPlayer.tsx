@@ -20,7 +20,7 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
     nowPlaying, isPlaying, progress, duration,
     togglePlayback, seek, skipNext, skipPrev,
     shuffleOn, repeatOn, toggleShuffle, toggleRepeat,
-    queue, queueIndex,
+    queue, queueIndex, playTrackWithQueue,
   } = useSpotify();
   const [liked, setLiked] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -65,10 +65,11 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
               queue.map((t, i) => (
                 <div
                   key={i}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-colors ${
+                  onClick={() => playTrackWithQueue(queue, i)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-colors cursor-pointer ${
                     i === queueIndex
                       ? "bg-primary/15 border border-primary/30"
-                      : "hover:bg-secondary/60"
+                      : "hover:bg-secondary/60 active:scale-[0.98]"
                   }`}
                 >
                   <img src={t.cover} alt={t.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
@@ -76,7 +77,7 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
                     <p className={`text-sm font-semibold truncate ${i === queueIndex ? "text-primary" : "text-foreground"}`}>{t.title}</p>
                     <p className="text-xs text-muted-foreground truncate">{t.artist}</p>
                   </div>
-                  {i === queueIndex && (
+                  {i === queueIndex ? (
                     <div className="flex gap-0.5">
                       {[0, 1, 2].map(bar => (
                         <div
@@ -86,6 +87,8 @@ const ExpandedPlayer = ({ open, onClose }: ExpandedPlayerProps) => {
                         />
                       ))}
                     </div>
+                  ) : (
+                    <Play size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0" />
                   )}
                 </div>
               ))

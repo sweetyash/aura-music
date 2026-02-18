@@ -340,11 +340,13 @@ const Discover = () => {
                               if (isCurrentTrackPlaying) {
                                 togglePlayback();
                               } else {
-                                const queueTracks = cards.map(c => ({
+                                // Build queue from remaining cards starting at current index
+                                const remainingCards = cards.slice(currentIndex);
+                                const queueTracks = remainingCards.map(c => ({
                                   uri: c.uri, title: c.title, artist: c.artist,
                                   cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs,
                                 }));
-                                playTrackWithQueue(queueTracks, currentIndex);
+                                playTrackWithQueue(queueTracks, 0);
                               }
                             }}
                             className="flex items-center gap-2"
