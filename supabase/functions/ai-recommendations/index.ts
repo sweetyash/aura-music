@@ -6,13 +6,46 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Validate that the caller provides the project anon key — prevents
+  // anonymous internet users from consuming AI credits.
+  const apiKey = req.headers.get("apikey") || req.headers.get("x-api-key");
+  const authHeader = req.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!apiKey && !bearerToken) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const providedKey = apiKey || bearerToken;
+  if (providedKey !== SUPABASE_ANON_KEY) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
-    const { topTracks, topArtists, recentTracks } = await req.json();
+    const body = await req.json();
+    const { topTracks, topArtists, recentTracks } = body;
+
+    // Basic input validation
+    if (!Array.isArray(topTracks) && !Array.isArray(topArtists) && !Array.isArray(recentTracks)) {
+      return new Response(JSON.stringify({ error: "Invalid input: expected arrays" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -58,8 +91,7 @@ Suggest 10 songs I might enjoy based on my taste. Include a mix of similar artis
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      console.error("AI gateway error:", response.status);
       return new Response(JSON.stringify({ error: "AI recommendation failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -69,25 +101,23 @@ Suggest 10 songs I might enjoy based on my taste. Include a mix of similar artis
     const aiData = await response.json();
     const content = aiData.choices?.[0]?.message?.content || "[]";
     
-    // Parse the JSON from the AI response
     let recommendations = [];
     try {
-      // Try to extract JSON array from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         recommendations = JSON.parse(jsonMatch[0]);
       }
     } catch (e) {
-      console.error("Failed to parse AI recommendations:", e, content);
+      console.error("Failed to parse AI recommendations");
     }
 
     return new Response(JSON.stringify({ recommendations }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("ai-recommendations error:", e);
+    console.error("ai-recommendations error:", e instanceof Error ? e.message : "Unknown");
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: "Internal error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
