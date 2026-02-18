@@ -4,7 +4,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, RecentTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 
 const NewReleases = () => {
-  const { isConnected, playTrack, connect } = useSpotify();
+  const { isConnected, playTrackWithQueue, connect } = useSpotify();
   const { getRecentlyPlayed } = useSpotifyApi();
   const [tracks, setTracks] = useState<RecentTrack[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,9 +18,16 @@ const NewReleases = () => {
       .finally(() => setLoading(false));
   }, [isConnected, getRecentlyPlayed]);
 
-  const handlePlay = (item: RecentTrack) => {
-    const t = item.track;
-    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t), t.preview_url, t.duration_ms);
+  const handlePlay = (item: RecentTrack, index: number) => {
+    const queueTracks = tracks.map(({ track: t }) => ({
+      uri: t.uri,
+      title: t.name,
+      artist: t.artists[0]?.name || "Unknown",
+      cover: getTrackCover(t),
+      previewUrl: t.preview_url,
+      durationMs: t.duration_ms,
+    }));
+    playTrackWithQueue(queueTracks, index);
   };
 
   const formatTime = (iso: string) => {
@@ -67,7 +74,7 @@ const NewReleases = () => {
             return (
               <div
                 key={`${t.id}-${item.played_at}`}
-                onClick={() => handlePlay(item)}
+                onClick={() => handlePlay(item, i)}
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/60 transition-colors group cursor-pointer"
               >
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">

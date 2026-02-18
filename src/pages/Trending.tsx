@@ -10,7 +10,7 @@ const timeRanges = [
 ] as const;
 
 const Trending = () => {
-  const { isConnected, playTrack, connect } = useSpotify();
+  const { isConnected, playTrackWithQueue, connect } = useSpotify();
   const { getTopTracks } = useSpotifyApi();
   const [tracks, setTracks] = useState<SpotifyTrack[]>([]);
   const [loading, setLoading] = useState(false);
@@ -25,8 +25,16 @@ const Trending = () => {
       .finally(() => setLoading(false));
   }, [isConnected, timeRange, getTopTracks]);
 
-  const handlePlay = (track: SpotifyTrack) => {
-    playTrack(track.uri, track.name, track.artists[0]?.name || "Unknown", getTrackCover(track), track.preview_url, track.duration_ms);
+  const handlePlay = (track: SpotifyTrack, index: number) => {
+    const queueTracks = tracks.map(t => ({
+      uri: t.uri,
+      title: t.name,
+      artist: t.artists[0]?.name || "Unknown",
+      cover: getTrackCover(t),
+      previewUrl: t.preview_url,
+      durationMs: t.duration_ms,
+    }));
+    playTrackWithQueue(queueTracks, index);
   };
 
   if (!isConnected) {
@@ -76,7 +84,7 @@ const Trending = () => {
           {tracks.map((track, i) => (
             <div
               key={track.id}
-              onClick={() => handlePlay(track)}
+              onClick={() => handlePlay(track, i)}
               className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/60 transition-colors group cursor-pointer"
             >
               <span className="text-xs font-bold text-muted-foreground w-5 text-right tabular-nums">{i + 1}</span>

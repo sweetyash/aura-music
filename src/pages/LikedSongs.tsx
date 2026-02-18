@@ -4,7 +4,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 
 const LikedSongs = () => {
-  const { isConnected, playTrack, connect } = useSpotify();
+  const { isConnected, playTrackWithQueue, connect } = useSpotify();
   const { getSavedTracks } = useSpotifyApi();
   const [tracks, setTracks] = useState<{ track: SpotifyTrack }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,8 +26,16 @@ const LikedSongs = () => {
       })
     : tracks;
 
-  const handlePlay = (t: SpotifyTrack) => {
-    playTrack(t.uri, t.name, t.artists[0]?.name || "Unknown", getTrackCover(t), t.preview_url, t.duration_ms);
+  const handlePlay = (t: SpotifyTrack, index: number) => {
+    const queueTracks = filtered.map(({ track }) => ({
+      uri: track.uri,
+      title: track.name,
+      artist: track.artists[0]?.name || "Unknown",
+      cover: getTrackCover(track),
+      previewUrl: track.preview_url,
+      durationMs: track.duration_ms,
+    }));
+    playTrackWithQueue(queueTracks, index);
   };
 
   if (!isConnected) {
@@ -74,10 +82,10 @@ const LikedSongs = () => {
         </div>
       ) : (
         <div className="flex flex-col gap-1">
-          {filtered.map(({ track: t }) => (
+          {filtered.map(({ track: t }, idx) => (
             <div
               key={t.id}
-              onClick={() => handlePlay(t)}
+              onClick={() => handlePlay(t, idx)}
               className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/60 transition-colors group cursor-pointer"
             >
               <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
