@@ -179,6 +179,27 @@ const Discover = () => {
     toast({ title: "❤️ Liked!", description: `${c.title} added to your Discover Likes` });
   }, [spawnHearts]);
 
+  // Auto-play the track after a swipe
+  const playTrackWithQueueRef = useRef(playTrackWithQueue);
+  useEffect(() => { playTrackWithQueueRef.current = playTrackWithQueue; }, [playTrackWithQueue]);
+
+  const autoPlayCard = useCallback((swipedIndex: number, allCards: DiscoverCard[]) => {
+    const nextIdx = swipedIndex + 1;
+    if (nextIdx >= allCards.length) return;
+    const remaining = allCards.slice(nextIdx);
+    const queueTracks = remaining.map(c => ({
+      uri: c.uri, title: c.title, artist: c.artist,
+      cover: c.cover, previewUrl: c.previewUrl, durationMs: c.durationMs,
+    }));
+    playTrackWithQueueRef.current(queueTracks, 0);
+  }, []);
+
+  const autoPlayCardRef = useRef(autoPlayCard);
+  useEffect(() => { autoPlayCardRef.current = autoPlayCard; }, [autoPlayCard]);
+
+  const cardsRef = useRef<DiscoverCard[]>([]);
+  useEffect(() => { cardsRef.current = cards; }, [cards]);
+
   // Stable refs for gesture handlers — avoids re-adding touch listeners on every render
   const doLikeRef = useRef(doLike);
   useEffect(() => { doLikeRef.current = doLike; }, [doLike]);
@@ -219,8 +240,12 @@ const Discover = () => {
         setExitDir(dir);
         const currentCard = cardDataRef.current;
         if (dir === "right" && currentCard) doLikeRef.current(currentCard);
+        setCurrentIndex((i) => {
+          const nextI = i + 1;
+          setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
+          return nextI;
+        });
         setTimeout(() => {
-          setCurrentIndex((i) => i + 1);
           setOffset({ x: 0, y: 0 });
           offsetRef.current = { x: 0, y: 0 };
           setExitDir(null);
@@ -249,8 +274,12 @@ const Discover = () => {
     setExitDir(dir);
     setOffset({ x: dir === "right" ? 300 : -300, y: 0 });
     offsetRef.current = { x: dir === "right" ? 300 : -300, y: 0 };
+    setCurrentIndex((i) => {
+      const nextI = i + 1;
+      setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
+      return nextI;
+    });
     setTimeout(() => {
-      setCurrentIndex((i) => i + 1);
       setOffset({ x: 0, y: 0 });
       offsetRef.current = { x: 0, y: 0 };
       setExitDir(null);
@@ -377,7 +406,12 @@ const Discover = () => {
                       const dir = cur.x > 0 ? "right" : "left";
                       setExitDir(dir);
                       if (dir === "right" && cardDataRef.current) doLikeRef.current(cardDataRef.current);
-                      setTimeout(() => { setCurrentIndex((i) => i + 1); setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; setExitDir(null); }, 350);
+                      setCurrentIndex((i) => {
+                        const nextI = i + 1;
+                        setTimeout(() => autoPlayCardRef.current(i, cardsRef.current), 50);
+                        return nextI;
+                      });
+                      setTimeout(() => { setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; setExitDir(null); }, 350);
                     } else { setOffset({ x: 0, y: 0 }); offsetRef.current = { x: 0, y: 0 }; }
                   }}
                   onMouseLeave={() => {
