@@ -491,7 +491,39 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, clearState, setToken, setTokenExpiry]);
 
-  const connect = useCallback(async () => { await loginWithSpotify(); }, []);
+  // Poll localStorage for token after popup-based OAuth completes
+  const connect = useCallback(async () => {
+    await loginWithSpotify();
+
+    // Poll every 500ms for up to 5 minutes for the token to appear in localStorage
+    // (set by extractSpotifyTokenFromUrl when the callback tab writes it)
+    const pollStart = Date.now();
+    const poll = setInterval(() => {
+      const storedToken = localStorage.getItem("spotify_access_token");
+      const storedExpiry = Number(localStorage.getItem("spotify_token_expires") || "0");
+
+      if (storedToken && storedExpiry > Date.now()) {
+        clearInterval(poll);
+        setToken(storedToken);
+        setTokenExpiry(storedExpiry);
+        const storedRefresh = localStorage.getItem("spotify_refresh_token");
+        if (storedRefresh) {
+          // token is already in localStorage from callback
+        }
+        validateToken(storedToken).then(({ valid, premium }) => {
+          if (!valid) { clearState(); return; }
+          setIsPremium(premium);
+          if (premium) initPlayer(storedToken);
+          toast({ title: "Spotify Connected!", description: "Welcome back 🎵" });
+        });
+      }
+
+      // Give up after 5 minutes
+      if (Date.now() - pollStart > 5 * 60 * 1000) {
+        clearInterval(poll);
+      }
+    }, 500);
+  }, [clearState, initPlayer, setToken, setTokenExpiry]);
 
   const refresh = useCallback(async () => {
     const fresh = await ensureToken();

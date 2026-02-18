@@ -4,23 +4,28 @@ const STORAGE_KEY_REFRESH = "spotify_refresh_token";
 const STORAGE_KEY_TOKEN = "spotify_access_token";
 const STORAGE_KEY_EXPIRES = "spotify_token_expires";
 
-/** Initiate Spotify login – redirects to Spotify authorize page */
+/** Initiate Spotify login – opens in new tab to handle iframe sandbox restrictions */
 export async function loginWithSpotify() {
   const { data, error } = await supabase.functions.invoke("spotify-login", {
-    body: { origin: window.location.origin },
+    body: { origin: getAppOrigin() },
   });
   if (error) throw error;
-  // Try top-level navigation (works on published app), fall back if sandboxed
-  try {
-    if (window.top && window.top !== window) {
-      window.top.location.href = data.url;
-    } else {
-      window.location.href = data.url;
-    }
-  } catch {
-    // Cross-origin iframe sandbox blocks top navigation — navigate current frame
+
+  // Open in a new tab/window — this bypasses iframe sandbox restrictions
+  // and lets the OAuth callback redirect back to the real app origin.
+  const popup = window.open(data.url, "_blank", "noopener,noreferrer");
+  if (!popup) {
+    // If popup was blocked, fall back to direct navigation
     window.location.href = data.url;
   }
+}
+
+/** Get the real app origin (not the iframe sandbox origin) */
+function getAppOrigin(): string {
+  // On the published app, window.location.origin is the real origin.
+  // Inside Lovable preview iframe, we still use window.location.origin
+  // which correctly points to the preview URL that the callback can redirect back to.
+  return window.location.origin;
 }
 
 /** Refresh the access token using the stored refresh token */
