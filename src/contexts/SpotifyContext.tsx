@@ -281,7 +281,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           audio.currentTime = 0;
           audio.play().catch(() => {});
         } else {
-          audioRef.current = null;
+          // Do NOT null audioRef.current here — stopAudioPreview inside playTrackInternal will handle cleanup
           setIsPlaying(false);
           setProgress(0);
           progressRef.current = 0;
@@ -290,9 +290,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
             const next = queueRef.current[nextIdx];
             setQueueIndex(nextIdx);
             queueIndexRef.current = nextIdx;
-            setTimeout(() => {
-              playTrackInternalRef.current(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
-            }, 300);
+            // Null the ref now so playTrackInternal's stopAudioPreview doesn't double-fire
+            audioRef.current = null;
+            playTrackInternalRef.current(next.uri, next.title, next.artist, next.cover, next.previewUrl, next.durationMs);
+          } else {
+            // End of queue
+            audioRef.current = null;
           }
         }
       };
