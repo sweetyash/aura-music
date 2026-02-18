@@ -338,7 +338,6 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-
       const player = new window.Spotify.Player({
         name: "Aura Music Player",
         getOAuthToken: (cb) => {
@@ -407,102 +406,53 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       playerRef.current = player;
     };
 
-    if (window.Spotify || (window as any).__spotifySDKReady) {
+    if (window.Spotify) {
       initSDK();
     } else {
-      (window as any).__onSpotifySDKReadyCallback = initSDK;
+      window.onSpotifyWebPlaybackSDKReady = initSDK;
     }
   }, [startProgressTracking, stopProgressTracking]);
 
-  // Helper: silently refresh token and validate
-  const silentRefresh = useCallback(async (): Promise<boolean> => {
-    const storedRefresh = localStorage.getItem("spotify_refresh_token");
-    if (!storedRefresh) return false;
-    try {
-      const { accessToken } = await refreshSpotifyToken();
-      setToken(accessToken);
-      setTokenExpiry(Date.now() + 3600 * 1000);
-      const { valid, premium } = await validateToken(accessToken);
-      if (!valid) { clearState(); return false; }
-      setIsPremium(premium);
-      if (premium) initPlayer(accessToken);
-      return true;
-    } catch {
-      clearState();
-      return false;
-    }
-  }, [clearState, initPlayer, setToken, setTokenExpiry]);
-
   // On mount: check for callback token in URL OR restore from localStorage
   useEffect(() => {
-    const urlResult = extractSpotifyTokenFromUrl();
+    const urlToken = extractSpotifyTokenFromUrl();
+    const activeToken = urlToken || token;
+    if (!activeToken) return;
 
-    if (urlResult) {
-      // Fresh token from OAuth callback — apply immediately, trust it
-      const expiry = Date.now() + (urlResult.expiresIn || 3600) * 1000;
-      setToken(urlResult.token);
-      setTokenExpiry(expiry);
-      if (urlResult.refreshToken) {
-        localStorage.setItem("spotify_refresh_token", urlResult.refreshToken);
-      }
-      toast({ title: "✅ Spotify Connected!", description: "Welcome back 🎵" });
-      // Validate in background — but NEVER wipe a brand-new token on network failure
-      validateToken(urlResult.token).then(({ valid, premium }) => {
-        if (valid) {
-          setIsPremium(premium);
-          if (premium) initPlayer(urlResult.token);
-        }
-        // If validation fails (network issue), keep the token — it's fresh from OAuth
-      });
-      return;
+    if (urlToken) {
+      setToken(urlToken);
+      setTokenExpiry(Date.now() + 3600 * 1000);
     }
 
-    // No URL token — check stored token
-    if (!token) return;
-
-    const isExpired = tokenExpiresAt.current < Date.now() + 60_000;
-
-    if (isExpired) {
-      // Try silent refresh first, no error toast
-      silentRefresh();
-      return;
-    }
-
-    // Token not expired — validate it; try silent refresh before clearing
-    validateToken(token).then(({ valid, premium }) => {
+    validateToken(activeToken).then(({ valid, premium }) => {
       if (!valid) {
-        silentRefresh();
+        toast({ title: "Spotify Connection Issue", description: "Try disconnecting and reconnecting from Profile.", variant: "destructive" });
         return;
       }
       setIsPremium(premium);
-      if (premium) initPlayer(token);
+      if (premium) {
+        initPlayer(activeToken);
+      }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ensureToken = useCallback(async (): Promise<string | null> => {
     if (token && tokenExpiresAt.current > Date.now() + 60_000) return token;
     try {
-      const { accessToken, refreshToken } = await refreshSpotifyToken();
-      const { valid, premium } = await validateToken(accessToken);
+      const freshToken = await refreshSpotifyToken();
+      const { valid, premium } = await validateToken(freshToken);
       if (!valid) { clearState(); return null; }
-      setToken(accessToken);
+      setToken(freshToken);
       setIsPremium(premium);
       setTokenExpiry(Date.now() + 3600 * 1000);
-      return accessToken;
+      return freshToken;
     } catch {
       clearState();
       return null;
     }
   }, [token, clearState, setToken, setTokenExpiry]);
 
-  // Connect: redirects to Spotify OAuth. On return, extractSpotifyTokenFromUrl handles the token.
-  const connect = useCallback(async () => {
-    try {
-      await loginWithSpotify();
-    } catch (err) {
-      toast({ title: "Login Failed", description: "Could not reach Spotify. Please try again.", variant: "destructive" });
-    }
-  }, []);
+  const connect = useCallback(async () => { await loginWithSpotify(); }, []);
 
   const refresh = useCallback(async () => {
     const fresh = await ensureToken();

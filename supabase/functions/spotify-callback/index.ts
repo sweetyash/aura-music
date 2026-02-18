@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
@@ -47,20 +49,20 @@ Deno.serve(async (req) => {
 
     if (!tokenRes.ok) {
       console.error("[spotify-callback] Token exchange failed:", JSON.stringify(tokenData));
-      const redirectTo = new URL("/", appOrigin);
-      redirectTo.searchParams.set("spotify_error", "token_exchange_failed");
-      return Response.redirect(redirectTo.toString(), 302);
+      return new Response(
+        JSON.stringify({ error: "Failed to exchange authorization code. Please try again." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     const { access_token, refresh_token, expires_in } = tokenData;
+    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    // Redirect back to the app — pass both tokens so the client can store them
+    // Token storage skipped (no authenticated user in this flow)
+
+    // Redirect back to the app using origin from state
     const redirectTo = new URL("/", appOrigin);
     redirectTo.searchParams.set("spotify_token", access_token);
-    if (refresh_token) {
-      redirectTo.searchParams.set("spotify_refresh_token", refresh_token);
-    }
-    redirectTo.searchParams.set("spotify_expires_in", String(expires_in || 3600));
 
     return Response.redirect(redirectTo.toString(), 302);
   } catch (error) {

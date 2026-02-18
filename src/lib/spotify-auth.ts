@@ -1,54 +1,23 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const STORAGE_KEY_REFRESH = "spotify_refresh_token";
-const STORAGE_KEY_TOKEN = "spotify_access_token";
-const STORAGE_KEY_EXPIRES = "spotify_token_expires";
-
-/** Initiate Spotify login – redirects the current tab to Spotify OAuth */
+/** Initiate Spotify login – opens Spotify authorize page */
 export async function loginWithSpotify() {
   const { data, error } = await supabase.functions.invoke("spotify-login", {
-    body: { origin: getAppOrigin() },
+    body: { origin: window.location.origin },
   });
   if (error) throw error;
-
-  // Navigate the current tab directly — this is the most reliable approach.
-  // The callback will redirect back to this origin with tokens in the URL,
-  // and extractSpotifyTokenFromUrl() will handle them on mount.
   window.location.href = data.url;
 }
 
-/** Get the real app origin (not the iframe sandbox origin) */
-function getAppOrigin(): string {
-  // On the published app, window.location.origin is the real origin.
-  // Inside Lovable preview iframe, we still use window.location.origin
-  // which correctly points to the preview URL that the callback can redirect back to.
-  return window.location.origin;
-}
-
 /** Refresh the access token using the stored refresh token */
-export async function refreshSpotifyToken(): Promise<{ accessToken: string; refreshToken: string }> {
-  const refreshToken = localStorage.getItem(STORAGE_KEY_REFRESH);
-  if (!refreshToken) throw new Error("No refresh token stored");
-
-  const { data, error } = await supabase.functions.invoke("spotify-refresh", {
-    body: { refresh_token: refreshToken },
-  });
+export async function refreshSpotifyToken(): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("spotify-refresh");
   if (error) throw error;
-  if (!data?.access_token) throw new Error("No access token in refresh response");
-
-  // Update stored refresh token if Spotify rotated it
-  if (data.refresh_token) {
-    localStorage.setItem(STORAGE_KEY_REFRESH, data.refresh_token);
-  }
-  // Persist the new access token
-  localStorage.setItem(STORAGE_KEY_TOKEN, data.access_token);
-  localStorage.setItem(STORAGE_KEY_EXPIRES, String(Date.now() + (data.expires_in || 3600) * 1000));
-
-  return { accessToken: data.access_token, refreshToken: data.refresh_token || refreshToken };
+  return data.access_token;
 }
 
 /** Check URL params for spotify_token after callback redirect */
-export function extractSpotifyTokenFromUrl(): { token: string; refreshToken: string | null; expiresIn: number } | null {
+export function extractSpotifyTokenFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
 
   // Handle denied permissions
@@ -61,26 +30,12 @@ export function extractSpotifyTokenFromUrl(): { token: string; refreshToken: str
   }
 
   const token = params.get("spotify_token");
-  if (!token) return null;
-
-  const refreshToken = params.get("spotify_refresh_token");
-  const expiresIn = parseInt(params.get("spotify_expires_in") || "3600", 10);
-
-  // Persist tokens immediately
-  localStorage.setItem(STORAGE_KEY_TOKEN, token);
-  localStorage.setItem(STORAGE_KEY_EXPIRES, String(Date.now() + expiresIn * 1000));
-  if (refreshToken) {
-    localStorage.setItem(STORAGE_KEY_REFRESH, refreshToken);
+  if (token) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("spotify_token");
+    window.history.replaceState({}, "", url.pathname);
   }
-
-  // Clean URL
-  const url = new URL(window.location.href);
-  url.searchParams.delete("spotify_token");
-  url.searchParams.delete("spotify_refresh_token");
-  url.searchParams.delete("spotify_expires_in");
-  window.history.replaceState({}, "", url.pathname);
-
-  return { token, refreshToken, expiresIn };
+  return token;
 }
 
 /** Check for spotify_error in URL (denied permissions) */

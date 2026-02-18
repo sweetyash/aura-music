@@ -85,7 +85,7 @@ export function useSpotifyApi() {
       let data: any;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
 
-      if (!res.ok) throw new Error(`${res.status}: ${data?.error?.message || data?.error || `Spotify API error ${res.status}`}`);
+      if (!res.ok) throw new Error(data?.error?.message || data?.error || `Spotify API error ${res.status}`);
       return data;
     },
     [token]
