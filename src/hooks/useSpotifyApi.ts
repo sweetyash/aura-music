@@ -61,21 +61,31 @@ export function useSpotifyApi() {
     async (endpoint: string, method = "GET", body?: any) => {
       if (!token) throw new Error("Not connected to Spotify");
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/spotify-api`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ endpoint, method, body, token }),
-        }
-      );
+      const url = endpoint.startsWith("http")
+        ? endpoint
+        : `https://api.spotify.com${endpoint}`;
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || "Spotify API error");
+      const fetchOptions: RequestInit = {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (body && method !== "GET") {
+        fetchOptions.body = JSON.stringify(body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+
+      if (res.status === 204) return { success: true };
+
+      const text = await res.text();
+      let data: any;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+      if (!res.ok) throw new Error(data?.error?.message || data?.error || `Spotify API error ${res.status}`);
       return data;
     },
     [token]
