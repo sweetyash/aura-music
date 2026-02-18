@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ListMusic, Play, Plus, Loader2, Music, ChevronRight, X, Lock, Globe, RefreshCw, AlertCircle } from "lucide-react";
+import { ListMusic, Play, Plus, Loader2, Music, ChevronRight, X, Lock, Globe, RefreshCw } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSpotifyApi, SpotifyPlaylist, SpotifyTrack, getTrackCover, formatDuration } from "@/hooks/useSpotifyApi";
 import { toast } from "@/hooks/use-toast";
@@ -56,7 +56,6 @@ const Playlists = () => {
       setNewDesc("");
       setIsPublic(false);
       setShowCreate(false);
-      setPermissionError(false);
       toast({ title: "✅ Playlist Created!", description: `"${newName.trim()}" is ready on Spotify.` });
     } catch (err: any) {
       console.error("Create playlist error:", err);
@@ -66,7 +65,7 @@ const Playlists = () => {
         setShowCreate(false);
         toast({
           title: "Permission Required",
-          description: "Please reconnect Spotify to grant playlist access.",
+          description: "Please reconnect Spotify to grant playlist creation access.",
           variant: "destructive",
         });
       } else {
@@ -89,11 +88,6 @@ const Playlists = () => {
     playTrackWithQueue(queueTracks, startIndex);
   };
 
-  const handleReconnect = () => {
-    disconnect();
-    setTimeout(() => connect(), 400);
-  };
-
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
@@ -110,8 +104,8 @@ const Playlists = () => {
   // Playlist detail view
   if (selectedPlaylist) {
     return (
-      <div className="px-4 pt-6 pb-44">
-        <button onClick={() => setSelectedPlaylist(null)} className="text-sm text-primary font-semibold mb-4 flex items-center gap-1">
+      <div className="px-4 pt-6 pb-36">
+        <button onClick={() => setSelectedPlaylist(null)} className="text-sm text-primary font-semibold mb-4">
           ← Back to Playlists
         </button>
         <div className="flex items-center gap-3 mb-5">
@@ -173,7 +167,7 @@ const Playlists = () => {
   }
 
   return (
-    <div className="px-4 pt-6 pb-44">
+    <div className="px-4 pt-6 pb-36">
 
       {/* Create Playlist Bottom Sheet Modal */}
       {showCreate && (
@@ -182,14 +176,14 @@ const Playlists = () => {
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={() => { if (!creating) setShowCreate(false); }}
           />
-          <div className="relative w-full max-w-lg bg-card border border-border rounded-t-3xl p-6 pb-10 animate-in slide-in-from-bottom duration-300 shadow-2xl">
+          <div className="relative w-full max-w-lg bg-card border border-border rounded-t-3xl p-6 pb-8 animate-in slide-in-from-bottom duration-300 shadow-2xl">
             {/* Handle bar */}
             <div className="w-10 h-1 rounded-full bg-border mx-auto mb-5" />
 
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-foreground">Create New Playlist</h2>
               <button
-                onClick={() => { setShowCreate(false); setNewName(""); setNewDesc(""); setIsPublic(false); }}
+                onClick={() => setShowCreate(false)}
                 disabled={creating}
                 className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -284,7 +278,6 @@ const Playlists = () => {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <ListMusic size={22} className="text-primary" />
@@ -298,19 +291,18 @@ const Playlists = () => {
           New
         </button>
       </div>
-      <p className="text-sm text-muted-foreground mb-4">{playlists.length} playlists</p>
+      <p className="text-sm text-muted-foreground mb-5">{playlists.length} playlists</p>
 
       {/* Permission error banner */}
       {permissionError && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 mb-4">
-          <AlertCircle size={18} className="text-destructive flex-shrink-0" />
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 mb-4">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Playlist permission missing</p>
-            <p className="text-xs text-muted-foreground">Reconnect Spotify to grant access</p>
+            <p className="text-sm font-semibold text-destructive mb-0.5">Playlist Permission Required</p>
+            <p className="text-xs text-muted-foreground">Your Spotify session needs to be refreshed to allow creating playlists. Please reconnect.</p>
           </div>
           <button
-            onClick={handleReconnect}
-            className="flex items-center gap-1.5 px-3 h-8 rounded-lg gradient-primary text-primary-foreground text-xs font-semibold flex-shrink-0"
+            onClick={async () => { disconnect(); setTimeout(() => connect(), 300); }}
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-destructive text-destructive-foreground text-xs font-semibold flex-shrink-0"
           >
             <RefreshCw size={12} />
             Reconnect

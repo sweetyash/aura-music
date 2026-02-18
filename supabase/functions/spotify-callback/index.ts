@@ -58,12 +58,11 @@ Deno.serve(async (req) => {
     const { access_token, refresh_token, expires_in } = tokenData;
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    // Redirect back to the app with both tokens
+    // Token storage skipped (no authenticated user in this flow)
+
+    // Redirect back to the app using origin from state
     const redirectTo = new URL("/", appOrigin);
     redirectTo.searchParams.set("spotify_token", access_token);
-    if (refresh_token) {
-      redirectTo.searchParams.set("spotify_refresh_token", refresh_token);
-    }
 
     return Response.redirect(redirectTo.toString(), 302);
   } catch (error) {

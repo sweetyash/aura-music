@@ -424,30 +424,15 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       setTokenExpiry(Date.now() + 3600 * 1000);
     }
 
-    validateToken(activeToken).then(async ({ valid, premium }) => {
+    validateToken(activeToken).then(({ valid, premium }) => {
       if (!valid) {
-        // Try silent token refresh first
-        try {
-          const freshToken = await refreshSpotifyToken();
-          const { valid: ok, premium: isPrem } = await validateToken(freshToken);
-          if (ok) {
-            setToken(freshToken);
-            setTokenExpiry(Date.now() + 3600 * 1000);
-            setIsPremium(isPrem);
-            if (isPrem) initPlayer(freshToken);
-            return;
-          }
-        } catch {
-          // Refresh failed or no refresh token stored — auto-disconnect cleanly
-        }
-        clearState();
+        toast({ title: "Spotify Connection Issue", description: "Try disconnecting and reconnecting from Profile.", variant: "destructive" });
         return;
       }
       setIsPremium(premium);
-      if (premium) initPlayer(activeToken);
-    }).catch(() => {
-      // validateToken itself threw — network issue, clear to be safe
-      clearState();
+      if (premium) {
+        initPlayer(activeToken);
+      }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
